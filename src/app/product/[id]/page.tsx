@@ -1,0 +1,334 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
+import { useAuth } from '@/context/AuthContext';
+import QuantitySelector from '@/components/QuantitySelector';
+
+interface Specification {
+  name: string;
+  options: string[];
+}
+
+interface Product {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  category: string;
+  mediums: string[];
+  frameTypes: string[];
+  frameColors: string[];
+  specifications?: Specification[];
+  basePrice: number;
+  priceModifiers: Record<string, any>;
+  unitsAvailable: number | null;
+  subCategory?: {
+    category?: {
+      slug: string;
+      name: string;
+    }
+  }
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  ART_PRINT: 'Art Print',
+  MIXED_MEDIA: 'Mixed Media',
+  PHOTOGRAPH_PRINT: 'Photograph Print',
+  HANDMADE_ART: 'Handmade Art',
+};
+
+export default function ProductPage() {
+  const { id } = useParams();
+  const { addToCart } = useCart();
+  const { addToWishlist, removeFromWishlist, isWishlisted } = useWishlist();
+  const { user } = useAuth();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Legacy states
+  const [selectedMedium, setSelectedMedium] = useState<string>('');
+  const [selectedFrame, setSelectedFrame] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('');
+  
+  // Dynamic spec states
+  const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string>>({});
+
+  const [quantity, setQuantity] = useState(1);
+  const [addedToCart, setAddedToCart] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/products/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        setProduct(data.product);
+        if (data.product.specifications && data.product.specifications.length > 0) {
+          const initialSpecs: Record<string, string> = {};
+          data.product.specifications.forEach((s: Specification) => {
+             if (s.options && s.options.length > 0) {
+               initialSpecs[s.name] = s.options[0];
+             }
+          });
+          setSelectedSpecs(initialSpecs);
+        } else {
+          if (data.product.mediums?.length > 0) {
+            setSelectedMedium(data.product.mediums[0]);
+          }
+          if (data.product.frameTypes?.length > 0) {
+            setSelectedFrame(data.product.frameTypes[0]);
+          }
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="page-content" style={{ textAlign: 'center' }}>
+        <div className="spinner"></div>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="page-content">
+        <div className="container empty-state">
+          <h2>Product Not Found</h2>
+          <p>This product may have been removed or doesn&apos;t exist.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const hasDynamicSpecs = product.specifications && product.specifications.length > 0;
+
+  const calculatePrice = () => {
+    let price = product.basePrice;
+    const modifiers = product.priceModifiers;
+
+    if (hasDynamicSpecs) {
+      const comboName = product.specifications!.map(s => selectedSpecs[s.name] || '').filter(Boolean).join(' | ');
+      if (modifiers && modifiers[comboName] !== undefined) {
+        return Number(modifiers[comboName]);
+      }
+      return price;
+    }
+
+    // Legacy fallback logic
+    const mPart = selectedMedium || '';
+    const fPart = selectedFrame && selectedFrame !== 'colored' ? selectedFrame : (selectedFrame === 'colored' ? 'colored' : '');
+    const key = `${mPart}-${fPart}`;
+
+    if (modifiers && modifiers[key] !== undefined) {
+      return Number(modifiers[key]);
+    }
+
+    if (selectedMedium && modifiers?.medium?.[selectedMedium]) {
+      price += modifiers.medium[selectedMedium];
+    }
+    if (selectedFrame && modifiers?.frameType?.[selectedFrame]) {
+      price += modifiers.frameType[selectedFrame];
+    }
+    return price;
+  };
+
+  const currentPrice = calculatePrice();
+  const wishlisted = isWishlisted(product.id);
+  
+  // Legacy logic variables
+  const isArtPrint = product.subCategory?.category?.slug === 'art-prints' || product.category === 'ART_PRINT';
+  const isPhotoPrint = product.subCategory?.category?.slug === 'photograph-print' || product.category === 'PHOTOGRAPH_PRINT';
+  const hasLegacyFrameOptions = !hasDynamicSpecs && (isArtPrint || isPhotoPrint);
+  const hasLegacyMediumOptions = hasLegacyFrameOptions && product.mediums.length > 0;
+  const showLegacyColorPicker = selectedFrame === 'colored';
+
+  const handleAddToCart = async () => {
+    let optionsPayload = {};
+    if (hasDynamicSpecs) {
+      optionsPayload = { 
+        selectedOptions: JSON.stringify(selectedSpecs),
+        medium: null,
+        frameType: null,
+        frameColor: null,
+      };
+    } else {
+      optionsPayload = {
+        medium: selectedMedium || null,
+        frameType: selectedFrame || null,
+        frameColor: showLegacyColorPicker ? selectedColor : null,
+      };
+    }
+
+    await addToCart({
+      productId: product.id,
+      title: product.title,
+      image: product.image,
+      quantity,
+      price: currentPrice,
+      ...optionsPayload,
+    } as any);
+    setAddedToCart(true);
+    setTimeout(() => setAddedToCart(false), 2000);
+  };
+
+  const handleWishlistToggle = async () => {
+    if (wishlisted) {
+      await removeFromWishlist(product.id);
+    } else {
+      await addToWishlist(product.id, product.title, product.image);
+    }
+  };
+
+  return (
+    <div className="page-content fade-in">
+      <div className="container">
+        <div className="product-detail">
+          <div className="product-image-main">
+            <img src={product.image} alt={product.title} />
+          </div>
+
+          <div className="product-info">
+            <p className="text-uppercase text-muted" style={{ marginBottom: 'var(--space-sm)' }}>
+              {product.subCategory?.category?.name || CATEGORY_LABELS[product.category] || product.category}
+            </p>
+            <h1>{product.title}</h1>
+            <p className="price">₹{currentPrice.toLocaleString()}</p>
+            <p className="description">{product.description}</p>
+
+            {hasDynamicSpecs ? (
+              // Dynamic Specs Render
+              product.specifications!.map(spec => (
+                <div key={spec.name} className="option-group">
+                  <label>{spec.name}</label>
+                  <div className="option-pills">
+                    {spec.options.map(opt => (
+                      <button
+                        key={opt}
+                        className={`option-pill ${selectedSpecs[spec.name] === opt ? 'selected' : ''}`}
+                        onClick={() => setSelectedSpecs(prev => ({ ...prev, [spec.name]: opt }))}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              // Legacy Specs Render
+              <>
+                {hasLegacyMediumOptions && (
+                  <div className="option-group">
+                    <label>Medium</label>
+                    <div className="option-pills">
+                      {product.mediums.map(medium => (
+                        <button
+                          key={medium}
+                          className={`option-pill ${selectedMedium === medium ? 'selected' : ''}`}
+                          onClick={() => setSelectedMedium(medium)}
+                        >
+                          {medium.charAt(0).toUpperCase() + medium.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {hasLegacyFrameOptions && product.frameTypes.length > 0 && (
+                  <div className="option-group">
+                    <label>Frame Type</label>
+                    <div className="option-pills">
+                      {product.frameTypes.map(frame => (
+                        <button
+                          key={frame}
+                          className={`option-pill ${selectedFrame === frame ? 'selected' : ''}`}
+                          onClick={() => {
+                            setSelectedFrame(frame);
+                            if (frame !== 'colored') setSelectedColor('');
+                          }}
+                        >
+                          {frame.charAt(0).toUpperCase() + frame.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {showLegacyColorPicker && product.frameColors.length > 0 && (
+                  <div className="option-group">
+                    <label>Frame Color</label>
+                    <div className="color-swatches">
+                      {product.frameColors.map(color => (
+                        <button
+                          key={color}
+                          className={`color-swatch ${selectedColor === color ? 'selected' : ''}`}
+                          style={{ backgroundColor: color }}
+                          onClick={() => setSelectedColor(color)}
+                          aria-label={`Select color ${color}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {product.unitsAvailable !== null && (
+              <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-md)' }}>
+                {product.unitsAvailable > 0
+                  ? `${product.unitsAvailable} units available`
+                  : 'Out of stock'}
+              </p>
+            )}
+
+            <div className="option-group">
+              <label>Quantity</label>
+              <QuantitySelector
+                quantity={quantity}
+                onChange={setQuantity}
+                max={product.unitsAvailable ?? undefined}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-xl)' }}>
+              <button
+                className={`btn ${addedToCart ? 'btn-accent' : 'btn-primary'} btn-full`}
+                onClick={handleAddToCart}
+                disabled={product.unitsAvailable !== null && product.unitsAvailable === 0}
+              >
+                {addedToCart ? '✓ Added to Cart' : 'Add to Cart'}
+              </button>
+              <button
+                className={`btn btn-secondary`}
+                onClick={handleWishlistToggle}
+                title={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+                style={{ padding: '12px 16px' }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill={wishlisted ? 'currentColor' : 'none'}
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  width="20"
+                  height="20"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                </svg>
+              </button>
+            </div>
+
+            {!user && (
+              <p className="text-xs text-muted" style={{ marginTop: 'var(--space-sm)', textAlign: 'center' }}>
+                Sign in to save items to your wishlist
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
