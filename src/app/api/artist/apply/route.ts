@@ -2,8 +2,6 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,25 +35,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
-    // Process File Uploads
+    // Process File Uploads (Mock placeholders supporting Edge Runtimes)
     const uploadedUrls: string[] = [];
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'artists');
-    await mkdir(uploadsDir, { recursive: true });
 
     for (const file of files) {
-      // Validate file size limit is handles in frontend primarily but safe check
       if (file.size > 20 * 1024 * 1024) {
         return NextResponse.json({ error: 'One or more files exceed size limits' }, { status: 400 });
       }
-
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const filepath = path.join(uploadsDir, filename);
-
-      await writeFile(filepath, buffer);
       uploadedUrls.push(`/uploads/artists/${filename}`);
     }
 

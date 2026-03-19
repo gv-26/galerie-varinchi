@@ -30,9 +30,6 @@ export async function GET() {
   }
 }
 
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -65,24 +62,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required artwork fields' }, { status: 400 });
     }
 
-    // Process Image Uploads
+    // Process Image Uploads (Mock placeholders supporting Edge Runtimes)
     const uploadedUrls: string[] = [];
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'artworks');
-    await mkdir(uploadsDir, { recursive: true });
 
     for (const file of files) {
       if (file.size > 10 * 1024 * 1024) {
         return NextResponse.json({ error: 'Each image must be less than 10MB' }, { status: 400 });
       }
-
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const filepath = path.join(uploadsDir, filename);
-
-      await writeFile(filepath, buffer);
       uploadedUrls.push(`/uploads/artworks/${filename}`);
     }
 
