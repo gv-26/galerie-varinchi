@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
