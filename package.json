@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "npx prisma generate && next build",
+    "build:pages": "npx prisma generate && next build && npx @cloudflare/next-on-pages && mv .vercel/output/static/_worker.js/index.js .vercel/output/static/_worker.js_file && rm -rf .vercel/output/static/_worker.js && mv .vercel/output/static/_worker.js_file .vercel/output/static/_worker.js",
     "start": "next start",
     "lint": "eslint",
     "seed": "npx tsx prisma/seed.ts"
