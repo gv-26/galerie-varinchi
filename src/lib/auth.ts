@@ -1,3 +1,8 @@
+import { cookies } from 'next/headers';
+import { db } from '../db';
+import { session } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
 const getSecret = () => new TextEncoder().encode(
   process.env.JWT_SECRET || 'dev-secret'
 );

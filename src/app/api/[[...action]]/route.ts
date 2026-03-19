@@ -5,7 +5,6 @@ import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { createToken, getCurrentUser } from '@/lib/auth';
-import { createToken, getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ action?: string[] }> }) {
   try {
