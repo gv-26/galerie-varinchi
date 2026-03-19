@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
+import { Suspense } from 'react';
+
 interface SubCategory {
   id: string;
   name: string;
@@ -24,7 +26,7 @@ interface Specification {
   options: SpecOption[];
 }
 
-export default function AddProductPage() {
+function AddProductContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestId = searchParams.get('requestId');
@@ -429,5 +431,13 @@ export default function AddProductPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AddProductPage() {
+  return (
+    <Suspense fallback={<div className="page-content" style={{ textAlign: 'center' }}><div className="spinner"></div></div>}>
+      <AddProductContent />
+    </Suspense>
   );
 }
