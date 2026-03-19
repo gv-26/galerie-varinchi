@@ -3,10 +3,15 @@
 export default $config({
   app(input) {
     return {
-      name: "galerievarinchie_artist",
+      name: "galerievarinchie",
       removal: input?.stage === "production" ? "retain" : "remove",
       protect: ["production"].includes(input?.stage),
       home: "aws",
+      providers: {
+        aws: {
+          region: "ap-south-1",
+        },
+      },
     };
   },
   async run() {
