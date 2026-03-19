@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { artistProfile as artistProfileSchema, artRequest as artRequestSchema } from '@/db/schema';
+import { eq, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET() {
@@ -11,22 +13,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const pendingArtists = await prisma.artistProfile.count({
-      where: { status: 'PENDING' },
-    });
-
-    const approvedArtists = await prisma.artistProfile.count({
-      where: { status: 'APPROVED' },
-    });
-
-    const pendingArtworks = await prisma.artRequest.count({
-      where: { status: 'PENDING' },
-    });
+    const [pendingArtistsQuery, approvedArtistsQuery, pendingArtworksQuery] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(artistProfileSchema).where(eq(artistProfileSchema.status, 'PENDING')),
+      db.select({ count: sql<number>`count(*)` }).from(artistProfileSchema).where(eq(artistProfileSchema.status, 'APPROVED')),
+      db.select({ count: sql<number>`count(*)` }).from(artRequestSchema).where(eq(artRequestSchema.status, 'PENDING'))
+    ]);
 
     return NextResponse.json({
-      pendingArtists,
-      approvedArtists,
-      pendingArtworks,
+      pendingArtists: Number(pendingArtistsQuery[0]?.count || 0),
+      approvedArtists: Number(approvedArtistsQuery[0]?.count || 0),
+      pendingArtworks: Number(pendingArtworksQuery[0]?.count || 0),
     });
   } catch (error) {
     console.error('Admin stats GET error:', error);

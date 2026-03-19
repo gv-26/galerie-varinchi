@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { user as userSchema, session as sessionSchema, otpToken } from '@/db/schema';
+import { eq, and, desc } from 'drizzle-orm';
 import { createToken } from '@/lib/auth';
 import { isOtpExpired } from '@/lib/otp';
 import { cookies } from 'next/headers';
@@ -15,33 +17,32 @@ export async function POST(request: Request) {
     }
 
     // Find the latest unused OTP for this email
-    const otpRecord = await prisma.otpToken.findFirst({
-      where: { email, otp, used: false },
-      orderBy: { createdAt: 'desc' },
+    const otpRecord = await db.query.otpToken.findFirst({
+      where: and(eq(otpToken.email, email), eq(otpToken.otp, otp), eq(otpToken.used, false)),
+      orderBy: [desc(otpToken.createdAt)],
     });
 
     if (!otpRecord) {
       return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 });
     }
 
-    if (isOtpExpired(otpRecord.expiresAt)) {
+    if (isOtpExpired(new Date(otpRecord.expiresAt))) {
       return NextResponse.json({ error: 'OTP has expired' }, { status: 400 });
     }
 
     // Mark OTP as used
-    await prisma.otpToken.update({
-      where: { id: otpRecord.id },
-      data: { used: true },
-    });
+    await db.update(otpToken).set({ used: true }).where(eq(otpToken.id, otpRecord.id));
 
     // Create or find user
     let user;
     if (isSignup) {
-      user = await prisma.user.create({
-        data: { email },
-      });
+      const [newUser] = await db.insert(userSchema).values({
+        id: crypto.randomUUID(),
+        email
+      }).returning();
+      user = newUser;
     } else {
-      user = await prisma.user.findUnique({ where: { email } });
+      user = await db.query.user.findFirst({ where: eq(userSchema.email, email) });
       if (!user) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
@@ -51,29 +52,28 @@ export async function POST(request: Request) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    const session = await prisma.session.create({
-      data: {
-        userId: user.id,
-        token: crypto.randomUUID(),
-        expiresAt,
-      },
-    });
+    const [session] = await db.insert(sessionSchema).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      token: crypto.randomUUID(),
+      expiresAt: expiresAt.toISOString(),
+    }).returning();
 
-    // Create JWT token (now async with jose)
+    // Create JWT token
     const token = await createToken(user.id, session.id);
 
-    // Set cookie via next/headers (works in edge with nodejs_compat)
+    // Set cookie
     const cookieStore = await cookies();
     cookieStore.set('auth-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
       path: '/',
+      maxAge: 30 * 24 * 60 * 60, // 30 days
     });
 
     return NextResponse.json({
-      message: isSignup ? 'Account created successfully' : 'Signed in successfully',
+      message: 'Verified successfully',
       user: {
         id: user.id,
         email: user.email,

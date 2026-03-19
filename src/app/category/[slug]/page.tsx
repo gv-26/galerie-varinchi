@@ -1,22 +1,23 @@
 export const runtime = 'edge';
 import Link from 'next/link';
 import ProductCard from '@/components/ProductCard';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { category as categorySchema, subCategory as subCategorySchema, product as productSchema } from '@/db/schema';
+import { eq, desc, asc } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 
 export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
 
-  // Look up the category by slug from the DB
-  const category = await prisma.category.findUnique({
-    where: { slug },
-    include: {
+  const category = await db.query.category.findFirst({
+    where: eq(categorySchema.slug, slug),
+    with: {
       subCategories: {
-        orderBy: { displayOrder: 'asc' },
-        include: {
+        orderBy: [asc(subCategorySchema.displayOrder)],
+        with: {
           products: {
-            where: { status: 'active' },
-            orderBy: { createdAt: 'desc' },
+            where: eq(productSchema.status, 'active'),
+            orderBy: [desc(productSchema.createdAt)],
           },
         },
       },

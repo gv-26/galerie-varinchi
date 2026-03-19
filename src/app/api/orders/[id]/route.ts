@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { order as orderSchema } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function PATCH(
@@ -21,16 +23,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
     }
 
-    const existing = await prisma.order.findUnique({ where: { id } });
+    const existing = await db.query.order.findFirst({ where: eq(orderSchema.id, id) });
     if (!existing) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     if (existing.status === 'COMPLETED') {
       return NextResponse.json({ error: 'Completed orders cannot be changed' }, { status: 400 });
     }
 
-    const order = await prisma.order.update({
-      where: { id },
-      data: { status },
-    });
+    const [order] = await db.update(orderSchema)
+      .set({ status })
+      .where(eq(orderSchema.id, id))
+      .returning();
 
     return NextResponse.json({ order });
   } catch (error) {

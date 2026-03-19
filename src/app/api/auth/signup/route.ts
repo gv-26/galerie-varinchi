@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { user, otpToken } from '@/db/schema';
 import { generateOtp, getOtpExpiryDate } from '@/lib/otp';
 import { sendOtpEmail } from '@/lib/email';
 
@@ -13,18 +14,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Valid email is required' }, { status: 400 });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await db.query.user.findFirst({
+      where: (users, { eq }) => eq(users.email, email)
+    });
     if (existingUser) {
       return NextResponse.json({ error: 'Account already exists. Please sign in.' }, { status: 400 });
     }
 
     const otp = generateOtp();
-    await prisma.otpToken.create({
-      data: {
-        email,
-        otp,
-        expiresAt: getOtpExpiryDate(),
-      },
+    await db.insert(otpToken).values({
+      id: crypto.randomUUID(),
+      email,
+      otp,
+      expiresAt: getOtpExpiryDate().toISOString(),
     });
 
     await sendOtpEmail(email, otp);

@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { cartItem as cartItemSchema } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET() {
@@ -11,9 +13,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const items = await prisma.cartItem.findMany({
-      where: { userId: user.id },
-      include: { product: true },
+    const items = await db.query.cartItem.findMany({
+      where: eq(cartItemSchema.userId, user.id),
+      with: { product: true },
     });
 
     return NextResponse.json({
@@ -44,18 +46,17 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const item = await prisma.cartItem.create({
-      data: {
-        userId: user.id,
-        productId: body.productId,
-        quantity: body.quantity || 1,
-        medium: body.medium || null,
-        frameType: body.frameType || null,
-        frameColor: body.frameColor || null,
-        selectedOptions: body.selectedOptions || null,
-        price: body.price,
-      },
-    });
+    const [item] = await db.insert(cartItemSchema).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      productId: body.productId,
+      quantity: body.quantity || 1,
+      medium: body.medium || null,
+      frameType: body.frameType || null,
+      frameColor: body.frameColor || null,
+      selectedOptions: body.selectedOptions || null,
+      price: body.price,
+    }).returning();
 
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
@@ -72,10 +73,9 @@ export async function PUT(request: Request) {
     }
 
     const { id, quantity } = await request.json();
-    await prisma.cartItem.update({
-      where: { id, userId: user.id },
-      data: { quantity },
-    });
+    await db.update(cartItemSchema)
+      .set({ quantity })
+      .where(and(eq(cartItemSchema.id, id), eq(cartItemSchema.userId, user.id)));
 
     return NextResponse.json({ message: 'Updated' });
   } catch (error) {
@@ -94,11 +94,11 @@ export async function DELETE(request: Request) {
     const body = await request.json();
 
     if (body.clearAll) {
-      await prisma.cartItem.deleteMany({ where: { userId: user.id } });
+      await db.delete(cartItemSchema).where(eq(cartItemSchema.userId, user.id));
     } else {
-      await prisma.cartItem.delete({
-        where: { id: body.id, userId: user.id },
-      });
+      await db.delete(cartItemSchema).where(
+        and(eq(cartItemSchema.id, body.id), eq(cartItemSchema.userId, user.id))
+      );
     }
 
     return NextResponse.json({ message: 'Deleted' });

@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { artistProfile as artistProfileSchema } from '@/db/schema';
+import { eq, asc } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET() {
@@ -11,9 +13,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const artists = await prisma.artistProfile.findMany({
-      where: { status: 'APPROVED' },
-      orderBy: { fullName: 'asc' },
+    const artists = await db.query.artistProfile.findMany({
+      where: eq(artistProfileSchema.status, 'APPROVED'),
+      orderBy: [asc(artistProfileSchema.fullName)],
     });
 
     return NextResponse.json({ artists });

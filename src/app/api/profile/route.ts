@@ -2,7 +2,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { user as userSchema } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 export async function PUT(request: Request) {
   try {
@@ -12,14 +14,14 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const updated = await prisma.user.update({
-      where: { id: user.id },
-      data: {
+    const [updated] = await db.update(userSchema)
+      .set({
         name: body.name ?? user.name,
         phone: body.phone ?? user.phone,
         address: body.address ?? user.address,
-      },
-    });
+      })
+      .where(eq(userSchema.id, user.id))
+      .returning();
 
     return NextResponse.json({ user: updated });
   } catch (error) {

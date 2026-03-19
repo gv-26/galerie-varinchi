@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { artistProfile as artistProfileSchema } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET() {
@@ -11,8 +13,8 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const profile = await prisma.artistProfile.findUnique({
-      where: { userId: user.id },
+    const profile = await db.query.artistProfile.findFirst({
+      where: eq(artistProfileSchema.userId, user.id),
     });
 
     return NextResponse.json({ profile });

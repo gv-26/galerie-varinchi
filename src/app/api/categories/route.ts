@@ -1,20 +1,22 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { category as categorySchema } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET all categories with their subcategories
 export async function GET() {
-  const categories = await prisma.category.findMany({
-    orderBy: { displayOrder: 'asc' },
-    include: {
+  const categoriesList = await db.query.category.findMany({
+    orderBy: (c, { asc }) => [asc(c.displayOrder)],
+    with: {
       subCategories: {
-        orderBy: { displayOrder: 'asc' },
+        orderBy: (s, { asc }) => [asc(s.displayOrder)],
       },
     },
   });
-  return NextResponse.json(categories);
+  return NextResponse.json(categoriesList);
 }
 
 // POST create a new category (admin only)
@@ -31,14 +33,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name and slug are required' }, { status: 400 });
     }
 
-    const existing = await prisma.category.findUnique({ where: { slug } });
+    const existing = await db.query.category.findFirst({ where: (c, { eq }) => eq(c.slug, slug) });
     if (existing) {
       return NextResponse.json({ error: 'A category with this slug already exists' }, { status: 400 });
     }
 
-    const category = await prisma.category.create({
-      data: { name, slug, displayOrder: displayOrder ?? 0 },
-    });
+    const [category] = await db.insert(categorySchema).values({
+      id: crypto.randomUUID(),
+      name,
+      slug,
+      displayOrder: displayOrder ?? 0,
+    }).returning();
 
     return NextResponse.json(category, { status: 201 });
   } catch (error) {

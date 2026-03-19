@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { artistProfile as artistProfileSchema, artRequest as artRequestSchema } from '@/db/schema';
+import { eq, desc } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET() {
@@ -11,17 +13,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const artist = await prisma.artistProfile.findUnique({
-      where: { userId: user.id },
+    const artist = await db.query.artistProfile.findFirst({
+      where: eq(artistProfileSchema.userId, user.id),
     });
 
     if (!artist) {
       return NextResponse.json({ error: 'Artist profile not found' }, { status: 404 });
     }
 
-    const requests = await prisma.artRequest.findMany({
-      where: { artistId: artist.id },
-      orderBy: { createdAt: 'desc' },
+    const requests = await db.query.artRequest.findMany({
+      where: eq(artRequestSchema.artistId, artist.id),
+      orderBy: [desc(artRequestSchema.createdAt)],
     });
 
     return NextResponse.json({ requests });
@@ -38,8 +40,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const artist = await prisma.artistProfile.findUnique({
-      where: { userId: user.id },
+    const artist = await db.query.artistProfile.findFirst({
+      where: eq(artistProfileSchema.userId, user.id),
     });
 
     if (!artist || artist.status !== 'APPROVED') {
@@ -63,7 +65,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required artwork fields' }, { status: 400 });
     }
 
-    // Process Image Uploads (Mock placeholders supporting Edge Runtimes)
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
@@ -75,23 +76,21 @@ export async function POST(request: NextRequest) {
       uploadedUrls.push(`/uploads/artworks/${filename}`);
     }
 
-    // Create ArtRequest
-    const artRequest = await prisma.artRequest.create({
-      data: {
-        artistId: artist.id,
-        title,
-        description,
-        categoryId,
-        subCategoryId,
-        yearCreated,
-        specifications: specifications || '[]',
-        images: JSON.stringify(uploadedUrls),
-        price,
-        quantity: isNaN(quantity) ? 1 : quantity,
-        additionalInfo: additionalInfo || null,
-        status: 'PENDING',
-      },
-    });
+    const [artRequest] = await db.insert(artRequestSchema).values({
+      id: crypto.randomUUID(),
+      artistId: artist.id,
+      title,
+      description,
+      categoryId,
+      subCategoryId,
+      yearCreated,
+      specifications: specifications || '[]',
+      images: JSON.stringify(uploadedUrls),
+      price,
+      quantity: isNaN(quantity) ? 1 : quantity,
+      additionalInfo: additionalInfo || null,
+      status: 'PENDING',
+    }).returning();
 
     return NextResponse.json({ message: 'Request submitted for review', request: artRequest }, { status: 201 });
   } catch (error) {

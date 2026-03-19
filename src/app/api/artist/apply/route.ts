@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { artistProfile as artistProfileSchema } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -11,10 +13,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Check if artist profile already exists
-    const existingProfile = await prisma.artistProfile.findUnique({
-      where: { userId: user.id },
+    const existingProfile = await db.query.artistProfile.findFirst({
+      where: eq(artistProfileSchema.userId, user.id)
     });
+    
     if (existingProfile) {
       return NextResponse.json({ error: 'Artist application already submitted' }, { status: 400 });
     }
@@ -36,7 +38,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
-    // Process File Uploads (Mock placeholders supporting Edge Runtimes)
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
@@ -48,23 +49,22 @@ export async function POST(request: NextRequest) {
       uploadedUrls.push(`/uploads/artists/${filename}`);
     }
 
-    // Create ArtistProfile in DB
-    const artistProfile = await prisma.artistProfile.create({
-      data: {
-        userId: user.id,
-        fullName,
-        email,
-        phone,
-        country,
-        state,
-        area,
-        portfolioLink,
-        bio,
-        specialization,
-        examples: JSON.stringify(uploadedUrls),
-        status: 'PENDING',
-      },
-    });
+    const [artistProfile] = await db.insert(artistProfileSchema).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      fullName,
+      email,
+      phone,
+      country,
+      state,
+      area,
+      portfolioLink,
+      bio,
+      specialization,
+      examples: JSON.stringify(uploadedUrls),
+      status: 'PENDING',
+      updatedAt: new Date().toISOString(),
+    }).returning();
 
     return NextResponse.json({ message: 'Profile submitted for review', profile: artistProfile }, { status: 201 });
   } catch (error) {

@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { wishlistItem as wishlistItemSchema } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET() {
@@ -11,9 +13,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const items = await prisma.wishlistItem.findMany({
-      where: { userId: user.id },
-      include: { product: true },
+    const items = await db.query.wishlistItem.findMany({
+      where: eq(wishlistItemSchema.userId, user.id),
+      with: { product: true },
     });
 
     return NextResponse.json({
@@ -39,16 +41,18 @@ export async function POST(request: Request) {
 
     const { productId } = await request.json();
 
-    const existing = await prisma.wishlistItem.findUnique({
-      where: { userId_productId: { userId: user.id, productId } },
+    const existing = await db.query.wishlistItem.findFirst({
+      where: and(eq(wishlistItemSchema.userId, user.id), eq(wishlistItemSchema.productId, productId))
     });
 
     if (existing) {
       return NextResponse.json({ message: 'Already in wishlist' });
     }
 
-    await prisma.wishlistItem.create({
-      data: { userId: user.id, productId },
+    await db.insert(wishlistItemSchema).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      productId,
     });
 
     return NextResponse.json({ message: 'Added to wishlist' }, { status: 201 });
@@ -67,9 +71,9 @@ export async function DELETE(request: Request) {
 
     const { productId } = await request.json();
 
-    await prisma.wishlistItem.deleteMany({
-      where: { userId: user.id, productId },
-    });
+    await db.delete(wishlistItemSchema).where(
+      and(eq(wishlistItemSchema.userId, user.id), eq(wishlistItemSchema.productId, productId))
+    );
 
     return NextResponse.json({ message: 'Removed from wishlist' });
   } catch (error) {

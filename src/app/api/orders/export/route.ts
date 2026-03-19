@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { order as orderSchema } from '@/db/schema';
+import { eq, desc } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -14,20 +16,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || 'NEW';
 
-    const orders = await prisma.order.findMany({
-      where: { status },
-      include: {
-        items: { include: { product: { include: { subCategory: { include: { category: true } } } } } },
+    const rawOrders = await db.query.order.findMany({
+      where: eq(orderSchema.status, status),
+      with: {
+        orderItems: { with: { product: { with: { subCategory: { with: { category: true } } } } } },
         user: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [desc(orderSchema.createdAt)],
     });
 
-    const rows = orders.flatMap(order =>
-      order.items.map(item => ({
+    const rows = rawOrders.flatMap(order =>
+      order.orderItems.map(item => ({
         'Order ID': order.id,
-        'Date': order.createdAt.toISOString().split('T')[0],
-        'Time': order.createdAt.toISOString().split('T')[1].substring(0, 8),
+        'Date': new Date(order.createdAt).toISOString().split('T')[0],
+        'Time': new Date(order.createdAt).toISOString().split('T')[1].substring(0, 8),
         'Product': item.product.title,
         'Category': item.product.subCategory?.category?.name || '',
         'Sub-Category': item.product.subCategory?.name || '',
@@ -49,10 +51,9 @@ export async function GET(request: NextRequest) {
       return new NextResponse('No orders found', { status: 404 });
     }
 
-    // Generate CSV String (100% Edge Compatible)
     const headers = Object.keys(rows[0]);
     const csvContent = [
-      headers.join(','), // Header row
+      headers.join(','),
       ...rows.map(row => 
         headers.map(header => `"${String(row[header as keyof typeof row]).replace(/"/g, '""')}"`).join(',')
       )
@@ -61,11 +62,11 @@ export async function GET(request: NextRequest) {
     return new NextResponse(csvContent, {
       headers: {
         'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="orders_${status.toLowerCase()}_${Date.now()}.csv"`,
+        'Content-Disposition': `attachment; filename="orders-${status}-${Date.now()}.csv"`,
       },
     });
   } catch (error) {
-    console.error('Export error:', error);
-    return new NextResponse('Something went wrong', { status: 500 });
+    console.error('Orders Export GET error:', error);
+    return new NextResponse('Error generating CSV', { status: 500 });
   }
 }

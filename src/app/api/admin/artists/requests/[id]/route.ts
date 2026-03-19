@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { artistProfile as artistProfileSchema } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(
@@ -15,8 +17,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const requestDetails = await prisma.artistProfile.findUnique({
-      where: { id },
+    const requestDetails = await db.query.artistProfile.findFirst({
+      where: eq(artistProfileSchema.id, id),
     });
 
     if (!requestDetails) {
@@ -49,10 +51,10 @@ export async function POST(
 
     const status = action === 'APPROVE' ? 'APPROVED' : 'DECLINED';
 
-    const updatedProfile = await prisma.artistProfile.update({
-      where: { id },
-      data: { status },
-    });
+    const [updatedProfile] = await db.update(artistProfileSchema)
+      .set({ status })
+      .where(eq(artistProfileSchema.id, id))
+      .returning();
 
     return NextResponse.json({ message: `Artist profile ${status.toLowerCase()}`, profile: updatedProfile });
   } catch (error) {

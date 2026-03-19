@@ -4,22 +4,22 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx prisma generate && next build",
-    "build:pages": "npx prisma generate && next build && npx @cloudflare/next-on-pages",
+    "build": "next build",
+    "build:pages": "next build && npx @cloudflare/next-on-pages",
     "start": "next start",
     "lint": "eslint",
-    "seed": "npx tsx prisma/seed.ts"
+    "db:pull": "npx drizzle-kit pull",
+    "db:push": "npx drizzle-kit push",
+    "db:studio": "npx drizzle-kit studio"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
-    "@prisma/adapter-neon": "^7.5.0",
-    "@prisma/client": "^7.5.0",
     "dotenv": "^17.3.1",
+    "drizzle-orm": "^0.45.1",
     "jose": "^6.2.2",
     "jsonwebtoken": "^9.0.3",
     "next": "16.1.6",
     "nodemailer": "^8.0.2",
-    "prisma": "^7.5.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "resend": "^6.9.4",
@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",
+    "@opennextjs/cloudflare": "^1.17.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
@@ -35,12 +36,10 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "better-sqlite3": "^12.8.0",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "tsx": "^4.21.0",
+    "node-domexception": "^2.0.2",
     "typescript": "^5"
-  },
-  "prisma": {
-    "seed": "npx tsx prisma/seed.ts"
   }
 }

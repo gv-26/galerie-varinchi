@@ -1,6 +1,8 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-import { prisma } from './prisma';
+import { db } from '../db';
+import { session } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 const getSecret = () => new TextEncoder().encode(
   process.env.JWT_SECRET || 'dev-secret'
@@ -31,14 +33,14 @@ export async function getCurrentUser() {
   const payload = await verifyToken(token);
   if (!payload) return null;
 
-  const session = await prisma.session.findUnique({
-    where: { id: payload.sessionId },
-    include: { user: true },
+  const sessionData = await db.query.session.findFirst({
+    where: eq(session.id, payload.sessionId),
+    with: { user: true },
   });
 
-  if (!session || session.expiresAt < new Date()) {
+  if (!sessionData || new Date(sessionData.expiresAt) < new Date()) {
     return null;
   }
 
-  return session.user;
+  return sessionData.user;
 }

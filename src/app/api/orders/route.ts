@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/db';
+import { order as orderSchema, orderItem as orderItemSchema, product as productSchema, cartItem as cartItemSchema } from '@/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/auth';
 import { sendOrderConfirmationEmail } from '@/lib/email';
 
@@ -17,25 +19,28 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const where = user.isAdmin
-      ? status ? { status } : {}
-      : { userId: user.id };
+    const conditions: any = user.isAdmin
+      ? status ? eq(orderSchema.status, status) : undefined
+      : eq(orderSchema.userId, user.id);
 
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where,
-        include: {
-          items: { include: { product: true } },
+    const [orders, countResult] = await Promise.all([
+      db.query.order.findMany({
+        where: conditions,
+        with: {
+          orderItems: { with: { product: true } },
           user: true,
         },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
+        orderBy: [desc(orderSchema.createdAt)],
+        limit,
+        offset,
       }),
-      prisma.order.count({ where }),
+      db.select({ count: sql<number>`count(*)` }).from(orderSchema).where(conditions)
     ]);
 
-    return NextResponse.json({ orders, total });
+    // Map `orderItems` to `items` for frontend consistency
+    const consistentOrders = orders.map(o => ({ ...o, items: o.orderItems }));
+
+    return NextResponse.json({ orders: consistentOrders, total: Number(countResult[0]?.count || 0) });
   } catch (error) {
     console.error('Orders GET error:', error);
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
@@ -61,56 +66,53 @@ export async function POST(request: Request) {
       0
     );
 
-    const order = await prisma.order.create({
-      data: {
-        userId: user.id,
-        totalAmount,
-        transactionId: transactionId || `TXN_${Date.now()}`,
-        customerName: user.name || '',
-        customerEmail: user.email,
-        customerPhone: user.phone || '',
-        customerAddress: user.address || '',
-        items: {
-          create: items.map((item: {
-            productId: string;
-            quantity: number;
-            medium?: string;
-            frameType?: string;
-            frameColor?: string;
-            selectedOptions?: string;
-            price: number;
-          }) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            medium: item.medium || null,
-            frameType: item.frameType || null,
-            frameColor: item.frameColor || null,
-            selectedOptions: item.selectedOptions || null,
-            price: item.price,
-          })),
-        },
-      },
-      include: { items: true },
+    const orderId = crypto.randomUUID();
+    const [order] = await db.insert(orderSchema).values({
+      id: orderId,
+      userId: user.id,
+      totalAmount,
+      transactionId: transactionId || `TXN_${Date.now()}`,
+      customerName: user.name || '',
+      customerEmail: user.email,
+      customerPhone: user.phone || '',
+      customerAddress: user.address || '',
+    }).returning();
+
+    await db.insert(orderItemSchema).values(
+      items.map((item: any) => ({
+        id: crypto.randomUUID(),
+        orderId,
+        productId: item.productId,
+        quantity: item.quantity,
+        medium: item.medium || null,
+        frameType: item.frameType || null,
+        frameColor: item.frameColor || null,
+        selectedOptions: item.selectedOptions || null,
+        price: item.price,
+      }))
+    );
+
+    // Decrement units and fetch complete returned item map
+    const orderItems = await db.query.orderItem.findMany({
+      where: eq(orderItemSchema.orderId, orderId)
     });
 
-    // Decrement units for mixed media / handmade art
     for (const item of items) {
-      const product = await prisma.product.findUnique({ where: { id: item.productId } });
+      const product = await db.query.product.findFirst({ where: eq(productSchema.id, item.productId) });
       if (product && product.unitsAvailable !== null) {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { unitsAvailable: Math.max(0, product.unitsAvailable - item.quantity) },
-        });
+        await db.update(productSchema)
+          .set({ unitsAvailable: Math.max(0, product.unitsAvailable - item.quantity) })
+          .where(eq(productSchema.id, item.productId));
       }
     }
 
     // Clear cart
-    await prisma.cartItem.deleteMany({ where: { userId: user.id } });
+    await db.delete(cartItemSchema).where(eq(cartItemSchema.userId, user.id));
 
     // Send order confirmation
     await sendOrderConfirmationEmail(user.email, order.id, totalAmount);
 
-    return NextResponse.json({ order }, { status: 201 });
+    return NextResponse.json({ order: { ...order, items: orderItems } }, { status: 201 });
   } catch (error) {
     console.error('Orders POST error:', error);
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
