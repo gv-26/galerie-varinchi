@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 
 interface OrderItem {
   id: string;
@@ -113,6 +114,9 @@ export default function OrdersPage() {
   return (
     <div className="page-content fade-in">
       <div className="container">
+        <div style={{ marginBottom: 'var(--space-md)' }}>
+          <Link href="/admin" className="text-sm text-muted">← Back to Dashboard</Link>
+        </div>
         <div className="admin-header">
           <h1>Order Management</h1>
           <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>

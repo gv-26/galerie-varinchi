@@ -36,6 +36,14 @@ export default async function AdminPage() {
               <span className="btn btn-secondary btn-sm">View Orders →</span>
             </div>
           </Link>
+
+          <Link href="/admin/artists" className="profile-card" style={{ textDecoration: 'none', transition: 'box-shadow 0.2s' }}>
+            <h3 style={{ marginBottom: 'var(--space-sm)' }}>Manage Artists</h3>
+            <p className="text-sm text-muted">Review onboarding applications and artwork requests</p>
+            <div style={{ marginTop: 'var(--space-md)' }}>
+              <span className="btn btn-accent btn-sm">Manage Artists →</span>
+            </div>
+          </Link>
         </div>
       </div>
     </div>

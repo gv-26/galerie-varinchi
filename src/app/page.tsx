@@ -1,20 +1,6 @@
 import Link from 'next/link';
-
-const categories = [
-  { name: 'Art Prints', slug: 'art-prints', description: 'Museum-quality prints on premium materials' },
-  { name: 'Mixed Media', slug: 'mixed-media', description: 'Unique multi-material artworks' },
-  { name: 'Photograph Print', slug: 'photograph-print', description: 'Fine art photography prints' },
-  { name: 'Handmade Art', slug: 'handmade-art', description: 'One-of-a-kind handcrafted pieces' },
-];
-
 import { prisma } from '@/lib/prisma';
-
-interface Testimonial {
-  id: string;
-  text: string;
-  user: { name: string };
-  product: { title: string };
-}
+import styles from './page.module.css';
 
 export default async function Home() {
   const testimonials = await prisma.testimonial.findMany({
@@ -26,65 +12,130 @@ export default async function Home() {
     },
   });
 
+  const showcaseItems = [
+    {
+      image: "/images/lifestyle-1.jpg",
+      alt: "Minimalist interior with framed art print on wall",
+      label: "Art Prints",
+      slug: "art-prints",
+      description: "Museum-quality prints on fine art paper and canvas.",
+    },
+    {
+      image: "/images/lifestyle-2.jpg",
+      alt: "Framed black and white photograph in gallery lighting",
+      label: "Photography",
+      slug: "photograph-print",
+      description: "Limited-edition photographic prints by contemporary artists.",
+    },
+    {
+      image: "/images/lifestyle-3.jpg",
+      alt: "Close-up of mixed media artwork with gold leaf and ink",
+      label: "Mixed Media",
+      slug: "mixed-media",
+      description: "Textured, layered works that blur the line between craft and fine art.",
+    },
+  ];
+
   return (
     <>
-      <section className="hero">
-        <div>
-          <h1 className="heading-serif">Art That Speaks<br />To Your Soul</h1>
-          <p>Discover curated artworks handpicked for the discerning collector. Each piece tells a story.</p>
+      {/* Hero Section */}
+      <section className={styles.hero}>
+        <div className={styles.heroImageContainer}>
+          <img
+            src="/images/mustafa-bepari.jpg"
+            alt="Contemporary art gallery interior with abstract painting"
+            className={styles.heroImage}
+          />
+          <div className={styles.heroOverlay} />
+        </div>
+        <div className={styles.heroContent}>
+          <h1 className={styles.heroTitle}>
+            Where art
+            <br />
+            finds home.
+          </h1>
+          <p className={styles.heroText}>
+            A curated marketplace connecting collectors with contemporary artists.
+            Discover art prints, mixed media, photography &amp; handmade originals.
+          </p>
+          <Link href="/category/art-prints" className="btn btn-primary" style={{ padding: '14px 36px', fontSize: '12px' }}>
+            Explore Collection
+          </Link>
         </div>
       </section>
 
-      <section className="featured-section">
-        <div className="container">
-          <h2 className="heading-serif">Explore Our Collections</h2>
-          <div className="product-grid">
-            {categories.map(cat => (
-              <Link key={cat.slug} href={`/category/${cat.slug}`} className="product-card" style={{ textAlign: 'center' }}>
-                <div className="product-card-image" style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'linear-gradient(135deg, #f5f0eb 0%, #e8e2d9 100%)',
-                }}>
-                  <span style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: '24px',
-                    color: 'var(--color-text-secondary)',
-                    fontWeight: 300,
-                  }}>
-                    {cat.name}
-                  </span>
-                </div>
-                <h3 className="product-card-title">{cat.name}</h3>
-                <p className="text-muted text-sm" style={{ marginTop: '4px' }}>{cat.description}</p>
-              </Link>
-            ))}
+      {/* Brand Philosophy */}
+      <section className={styles.sectionSplit}>
+        <div className={styles.gridSplit}>
+          <div className={styles.textCol}>
+            <span className={styles.overline}>Our Philosophy</span>
+            <h2 className={styles.sectionTitle}>Every piece tells a story.</h2>
+            <p className={styles.paragraph}>
+              Galerie Varinchie is a curated space where emerging and established
+              artists share their vision with collectors who appreciate the
+              extraordinary. We believe art should be accessible, personal, and
+              transformative.
+            </p>
+            <p className={styles.paragraph}>
+              From limited-edition prints to one-of-a-kind handmade pieces, every
+              work is selected for its ability to evoke emotion and elevate the
+              spaces we inhabit.
+            </p>
+
+          </div>
+          <div className={styles.imgCol}>
+            <div className={styles.imageFrame}>
+              <img
+                src="/images/about.jpg"
+                alt="Artist in a sunlit studio with art pieces"
+                className={styles.aspectImage}
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      <section style={{ padding: 'var(--space-4xl) 0', textAlign: 'center' }}>
-        <div className="container">
-          <h2 className="heading-serif" style={{ fontSize: '28px', marginBottom: 'var(--space-md)' }}>
-            Every Piece, A Conversation
-          </h2>
-          <p className="text-secondary" style={{ maxWidth: '520px', margin: '0 auto', lineHeight: 1.8 }}>
-            At Galerie Varinchie, we believe art is more than decoration — it&apos;s an expression of identity.
-            Our carefully curated collection spans prints, mixed media, photography, and handmade works from
-            emerging and established artists.
-          </p>
+      {/* Visual Showcase */}
+      <section className={styles.sectionSplit} style={{ paddingTop: 0 }}>
+        <div style={{ maxWidth: 'var(--max-width)', margin: '0 auto 3rem' }}>
+          <span className={styles.overline}>What We Offer</span>
+          <h2 className={styles.sectionTitle}>Art for every sensibility.</h2>
+        </div>
+        <div className={styles.showcaseGrid}>
+          {showcaseItems.map((item) => (
+            <Link href={`/category/${item.slug}`} key={item.label} className={styles.card}>
+              <div className={styles.cardImageFrame}>
+                <img src={item.image} alt={item.alt} className={styles.cardImage} />
+              </div>
+              <h3 className={styles.cardTitle}>{item.label}</h3>
+              <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>{item.description}</p>
+            </Link>
+          ))}
         </div>
       </section>
 
+      {/* Call to Action */}
+      <section className={styles.ctaSection}>
+        <div className={styles.ctaContainer}>
+          <h2 className={styles.sectionTitle} style={{ marginBottom: '1rem' }}>Begin your collection.</h2>
+          <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', lineHeight: '1.8' }}>
+            Discover works from talented artists around the world. Each piece is
+            carefully curated and available with premium framing options.
+          </p>
+          <div className={styles.flexCenter}>
+            <Link href="/category/art-prints" className="btn btn-primary btn-sm">Browse Art</Link>
+            <Link href="/contact" className="btn btn-secondary btn-sm">Contact Us</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
       {testimonials.length > 0 && (
         <section style={{ padding: 'var(--space-2xl) 0 var(--space-4xl)', background: 'var(--color-bg)' }}>
           <div className="container">
-            <h2 className="heading-serif" style={{ fontSize: '28px', marginBottom: 'var(--space-xl)', textAlign: 'center' }}>
-              What Collectors Say
-            </h2>
+            <h2 className={styles.overline} style={{ textAlign: 'center', marginBottom: 'var(--space-xl)' }}>What Collectors Say</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 'var(--space-xl)' }}>
-              {testimonials.map((test: any) => (
+              {testimonials.map((test) => (
                 <div key={test.id} style={{ 
                   background: 'var(--color-bg)', 
                   padding: 'var(--space-lg)', 

@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
         title: body.title,
         description: body.description,
         image: body.image,
+        images: body.images || "[]",
         subCategoryId: body.subCategoryId,
         status: 'active',
         mediums: JSON.stringify(body.mediums || []),
@@ -63,6 +64,13 @@ export async function POST(request: NextRequest) {
         unitsAvailable: body.unitsAvailable || null,
       },
     });
+
+    if (body.requestId) {
+      await prisma.artRequest.update({
+        where: { id: body.requestId },
+        data: { status: 'APPROVED' },
+      });
+    }
 
     return NextResponse.json({ product }, { status: 201 });
   } catch (error) {

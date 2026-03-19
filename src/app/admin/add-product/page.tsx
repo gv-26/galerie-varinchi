@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface SubCategory {
@@ -26,6 +26,9 @@ interface Specification {
 
 export default function AddProductPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestId = searchParams.get('requestId');
+
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +42,7 @@ export default function AddProductPage() {
   const [description, setDescription] = useState('');
   
   // Image Upload
-  const [image, setImage] = useState('');
+  const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const [basePrice, setBasePrice] = useState('');
@@ -57,13 +60,47 @@ export default function AddProductPage() {
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(data => {
       setCategories(data);
-      if (data.length > 0) {
+      if (data.length > 0 && !requestId) {
         setCategoryId(data[0].id);
         setSubCategories(data[0].subCategories);
         if (data[0].subCategories.length > 0) setSubCategoryId(data[0].subCategories[0].id);
       }
     });
-  }, []);
+  }, [requestId]);
+
+  useEffect(() => {
+    if (!requestId || categories.length === 0) return;
+
+    fetch(`/api/admin/artwork-requests/${requestId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.request) {
+          const req = data.request;
+          setTitle(req.title);
+          setDescription(req.description);
+          setBasePrice(req.price.toString());
+          setUnitsAvailable(req.quantity.toString());
+          setHasUnits(req.quantity > 0);
+          
+          setCategoryId(req.categoryId);
+          const cat = categories.find(c => c.id === req.categoryId);
+          if (cat) {
+            setSubCategories(cat.subCategories || []);
+            setSubCategoryId(req.subCategoryId);
+          }
+
+          const parsedSpecs = JSON.parse(req.specifications || '[]');
+          setSpecs(parsedSpecs.map((s: any) => ({
+            id: Math.random().toString(36).substring(2, 9),
+            name: s.name,
+            options: s.options.map((o: string) => ({ value: o }))
+          })));
+
+          const parsedImages = JSON.parse(req.images || '[]');
+          setImages(parsedImages);
+        }
+      });
+  }, [requestId, categories]);
 
   const handleCategoryChange = (id: string) => {
     setCategoryId(id);
@@ -74,24 +111,23 @@ export default function AddProductPage() {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
+    const uploadedUrls: string[] = [];
 
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setImage(data.url);
-      } else {
-        alert(data.error || 'Upload failed');
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const formData = new FormData();
+        formData.append('file', selectedFiles[i]);
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) {
+          uploadedUrls.push(data.url);
+        }
       }
+      setImages(prev => [...prev, ...uploadedUrls]);
     } catch {
       alert('Upload failed');
     } finally {
@@ -181,12 +217,14 @@ export default function AddProductPage() {
     const body = {
       title,
       description,
-      image: image || '/images/placeholder.jpg',
+      image: images[0] || '/images/placeholder.jpg',
+      images: JSON.stringify(images),
       subCategoryId,
       specifications: cleanedSpecs,
       basePrice: parseFloat(basePrice),
       priceModifiers: finalPrices,
       unitsAvailable: hasUnits ? (parseInt(unitsAvailable) || 0) : null,
+      requestId: requestId || undefined,
     };
 
     try {
@@ -263,14 +301,25 @@ export default function AddProductPage() {
                 <textarea value={description} onChange={e => setDescription(e.target.value)} required placeholder="Product description" rows={4} />
               </div>
               <div className="form-group">
-                <label>Product Image</label>
+                <label>Product Images</label>
                 <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center' }}>
-                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} />
+                  <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageUpload} />
                   {uploading && <span className="spinner"></span>}
                 </div>
-                {image && (
-                  <div style={{ marginTop: 'var(--space-md)' }}>
-                    <img src={image} alt="Preview" style={{ maxWidth: '100%', height: 'auto', borderRadius: 'var(--radius-sm)' }} />
+                {images.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
+                    {images.map((img, idx) => (
+                      <div key={idx} style={{ position: 'relative', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                        <img src={img} alt={`Preview ${idx + 1}`} style={{ width: '100%', height: '100px', objectFit: 'cover' }} />
+                        <button 
+                          type="button" 
+                          onClick={() => setImages(prev => prev.filter((_, i) => i !== idx))}
+                          style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(255,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

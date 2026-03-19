@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Category {
   name: string;
@@ -16,13 +16,27 @@ export default function Navbar({ categories }: { categories: Category[] }) {
   const { totalItems: cartCount } = useCart();
   const { totalItems: wishlistCount } = useWishlist();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isArtist, setIsArtist] = useState(false);
+
+  useEffect(() => {
+    if (user && !user.isAdmin) {
+      fetch('/api/artist/profile')
+        .then(res => res.json())
+        .then(data => setIsArtist(!!data.profile))
+        .catch(() => setIsArtist(false));
+    } else {
+      setIsArtist(false);
+    }
+  }, [user]);
 
   return (
     <nav className="navbar">
-      <div className="container">
-        <Link href="/" className="nav-brand">
-          Galerie Varinchie
-        </Link>
+      <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '100%', padding: '0 max(24px, 4vw)' }}>
+        <div style={{ flex: '1', display: 'flex', justifyContent: 'flex-start' }}>
+          <Link href="/" className="nav-brand" style={{ fontSize: '12px', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Galerie Varinchie
+          </Link>
+        </div>
 
         <button className="nav-toggle" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
           <span></span>
@@ -30,34 +44,48 @@ export default function Navbar({ categories }: { categories: Category[] }) {
           <span></span>
         </button>
 
-        <div className={`nav-categories ${menuOpen ? 'open' : ''}`}>
+        <div className={`nav-categories ${menuOpen ? 'open' : ''}`} style={{ display: 'flex', gap: 'var(--space-lg)', justifyContent: 'center', flex: '2' }}>
           {categories.map(cat => (
-            <Link key={cat.slug} href={`/category/${cat.slug}`} onClick={() => setMenuOpen(false)}>
+            <Link key={cat.slug} href={`/category/${cat.slug}`} onClick={() => setMenuOpen(false)} style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 600, color: 'var(--color-text)' }}>
               {cat.name}
             </Link>
           ))}
         </div>
 
-        <div className="nav-actions">
-          <Link href="/wishlist" className="nav-icon-btn" title="Wishlist">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-            </svg>
-            {wishlistCount > 0 && <span className="nav-badge">{wishlistCount}</span>}
-          </Link>
+        <div style={{ flex: '1', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-md)' }}>
+          <div className="nav-actions">
+            <Link href="/wishlist" className="nav-icon-btn" title="Wishlist">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.2} stroke="currentColor" width={18} height={18}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+              </svg>
+              {wishlistCount > 0 && <span className="nav-badge" style={{ fontSize: '9px', padding: '2px 4px' }}>{wishlistCount}</span>}
+            </Link>
 
-          <Link href="/cart" className="nav-icon-btn" title="Cart">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-            </svg>
-            {cartCount > 0 && <span className="nav-badge">{cartCount}</span>}
-          </Link>
+            <Link href="/cart" className="nav-icon-btn" title="Cart">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.2} stroke="currentColor" width={18} height={18}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+              </svg>
+              {cartCount > 0 && <span className="nav-badge" style={{ fontSize: '9px', padding: '2px 4px' }}>{cartCount}</span>}
+            </Link>
 
-          <Link href={user ? '/profile' : '/auth/signin'} className="nav-icon-btn" title={user ? 'Profile' : 'Sign In'}>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-            </svg>
-          </Link>
+            {user && user.isAdmin && (
+              <Link href="/admin" className="text-sm" style={{ marginRight: 'var(--space-sm)', color: 'var(--color-accent)', fontWeight: 500, fontSize: '12px' }}>
+                Admin Dashboard
+              </Link>
+            )}
+
+            {user && !user.isAdmin && isArtist && (
+              <Link href="/artist/dashboard" className="text-sm" style={{ marginRight: 'var(--space-sm)', color: 'var(--color-text-secondary)', fontWeight: 500, fontSize: '12px' }}>
+                Artist Dashboard
+              </Link>
+            )}
+
+            <Link href={user ? '/profile' : '/auth/signin'} className="nav-icon-btn" title={user ? 'Profile' : 'Sign In'}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.2} stroke="currentColor" width={18} height={18}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              </svg>
+            </Link>
+          </div>
         </div>
       </div>
     </nav>

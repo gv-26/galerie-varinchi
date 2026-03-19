@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 
 export default function SignInPage() {
   const router = useRouter();
+  const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'email' | 'otp'>('email');
@@ -48,8 +50,8 @@ export default function SignInPage() {
     setLoading(false);
 
     if (res.ok) {
+      await refreshUser();
       router.push('/');
-      router.refresh();
     } else {
       setError(data.error);
     }
