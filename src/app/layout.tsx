@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   description: "Discover curated art prints, mixed media, photographs, and handmade art pieces. Each work is carefully selected to bring beauty and meaning to your space.",
 };
 
-export const dynamic = 'force-dynamic';
+// Removed global force-dynamic to enable static page rendering and reduce function bundle bloat
 export const runtime = 'edge';
 
 export default function RootLayout({
