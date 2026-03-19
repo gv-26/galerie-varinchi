@@ -12,7 +12,10 @@ if (globalForPrisma.prisma) {
   prismaClient = globalForPrisma.prisma;
 } else {
   // Use Neon serverless driver with Pool for Cloudflare edge worker compatibility
-  const connectionString = process.env.DATABASE_URL || 'postgres://u:p@localhost:5432/d';
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required but was not provided. Skipping connection to avoid build-time timeouts.');
+  }
+  const connectionString = process.env.DATABASE_URL;
   const pool = new Pool({ connectionString });
   // Cast as any to bypass internal definition discrepancies in current adapter package version
   const adapter = new PrismaNeon(pool as any);
