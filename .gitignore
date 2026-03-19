@@ -44,3 +44,9 @@ next-env.d.ts
 
 # local databases
 *.db
+
+# sst
+.sst
+
+# open-next
+.open-next

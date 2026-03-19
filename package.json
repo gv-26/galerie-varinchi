@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
     "build": "next build",
-    "build:pages": "next build && npx @opennextjs/cloudflare build && mkdir -p .open-next/assets/_worker.js && mv .open-next/worker.js .open-next/assets/_worker.js/index.js && cp -r .open-next/cloudflare .open-next/middleware .open-next/.build .open-next/server-functions .open-next/assets/_worker.js/",
-    "start": "next start",
-    "lint": "eslint",
     "db:pull": "npx drizzle-kit pull",
     "db:push": "npx drizzle-kit push",
-    "db:studio": "npx drizzle-kit studio"
+    "db:studio": "npx drizzle-kit studio",
+    "deploy": "sst deploy --stage production",
+    "dev": "sst dev",
+    "lint": "eslint",
+    "start": "next start"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -19,17 +19,16 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "resend": "^6.9.4"
+    "resend": "^6.9.4",
+    "sst": "4.5.0"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^1.17.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "typescript": "^5",
-    "wrangler": "^4.75.0"
+    "typescript": "^5"
   }
 }
