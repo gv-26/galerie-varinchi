@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:pages": "next build && npx @opennextjs/cloudflare",
+    "build:pages": "next build && npx @opennextjs/cloudflare build",
     "start": "next start",
     "lint": "eslint",
     "db:pull": "npx drizzle-kit pull",
