@@ -1,5 +1,5 @@
-export const dynamic = 'force-dynamic';
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
