@@ -14,16 +14,13 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
-    "@types/bcryptjs": "^2.4.6",
-    "bcryptjs": "^3.0.3",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.1",
     "jose": "^6.2.2",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "resend": "^6.9.4",
-    "uuid": "^13.0.0"
+    "resend": "^6.9.4"
   },
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",

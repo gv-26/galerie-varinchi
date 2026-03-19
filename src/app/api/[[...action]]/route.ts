@@ -5,7 +5,7 @@ import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { createToken, getCurrentUser } from '@/lib/auth';
-import { sendOtpEmail } from '@/lib/email';
+import { createToken, getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ action?: string[] }> }) {
   try {
@@ -80,6 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (!otp) {
           const code = Math.floor(100000 + Math.random() * 900000).toString();
           await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: new Date(Date.now() + 600000).toISOString() }).onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false } });
+          const { sendOtpEmail } = await import('@/lib/email');
           await sendOtpEmail(email, code);
           return NextResponse.json({ message: 'Sent' });
         }

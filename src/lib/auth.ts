@@ -1,14 +1,9 @@
-import { SignJWT, jwtVerify } from 'jose';
-import { cookies } from 'next/headers';
-import { db } from '../db';
-import { session } from '../db/schema';
-import { eq } from 'drizzle-orm';
-
 const getSecret = () => new TextEncoder().encode(
   process.env.JWT_SECRET || 'dev-secret'
 );
 
 export async function createToken(userId: string, sessionId: string): Promise<string> {
+  const { SignJWT } = await import('jose');
   return new SignJWT({ userId, sessionId })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('30d')
@@ -17,6 +12,7 @@ export async function createToken(userId: string, sessionId: string): Promise<st
 
 export async function verifyToken(token: string): Promise<{ userId: string; sessionId: string } | null> {
   try {
+    const { jwtVerify } = await import('jose');
     const { payload } = await jwtVerify(token, getSecret());
     return payload as { userId: string; sessionId: string };
   } catch {
