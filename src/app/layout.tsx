@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 // Removed global force-dynamic to enable static page rendering and reduce function bundle bloat
-export const runtime = 'edge';
+// Removed global runtime = 'edge' to enable static optimization for frontend pages
 
 export default function RootLayout({
   children,
