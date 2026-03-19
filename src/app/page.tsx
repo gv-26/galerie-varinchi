@@ -1,17 +1,8 @@
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
 import styles from './page.module.css';
+import TestimonialsClient from '@/components/TestimonialsClient';
 
-export default async function Home() {
-  const testimonials = await prisma.testimonial.findMany({
-    take: 6,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      user: { select: { name: true } },
-      product: { select: { title: true } },
-    },
-  });
-
+export default function Home() {
   const showcaseItems = [
     {
       image: "/images/lifestyle-1.jpg",
@@ -130,30 +121,7 @@ export default async function Home() {
       </section>
 
       {/* Testimonials */}
-      {testimonials.length > 0 && (
-        <section style={{ padding: 'var(--space-2xl) 0 var(--space-4xl)', background: 'var(--color-bg)' }}>
-          <div className="container">
-            <h2 className={styles.overline} style={{ textAlign: 'center', marginBottom: 'var(--space-xl)' }}>What Collectors Say</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 'var(--space-xl)' }}>
-              {testimonials.map((test) => (
-                <div key={test.id} style={{ 
-                  background: 'var(--color-bg)', 
-                  padding: 'var(--space-lg)', 
-                  border: '1px solid var(--color-border)', 
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.02)'
-                }}>
-                  <p style={{ fontStyle: 'italic', marginBottom: 'var(--space-md)', color: 'var(--color-text)' }}>
-                    &quot;{test.text}&quot;
-                  </p>
-                  <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{test.user.name || 'Anonymous'}</p>
-                  <p className="text-xs text-muted">Bought {test.product.title}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      <TestimonialsClient />
     </>
   );
 }
