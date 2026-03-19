@@ -1,24 +1,22 @@
-import nodemailer from 'nodemailer';
-
-const transporter = process.env.SMTP_USER
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    })
-  : null;
-
 export async function sendOtpEmail(email: string, otp: string): Promise<void> {
-  if (!transporter) {
+  if (!process.env.SMTP_USER) {
     console.log(`\n========================================`);
     console.log(`  OTP for ${email}: ${otp}`);
     console.log(`========================================\n`);
     return;
   }
+
+  // Lazy load nodemailer to unblock Edge bundles during static pre-evaluations
+  const nodemailer = await import('nodemailer');
+  const transporter = nodemailer.default.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
 
   await transporter.sendMail({
     from: `"Galerie Varinchie" <${process.env.SMTP_USER}>`,
@@ -40,7 +38,7 @@ export async function sendOrderConfirmationEmail(
   orderId: string,
   totalAmount: number
 ): Promise<void> {
-  if (!transporter) {
+  if (!process.env.SMTP_USER) {
     console.log(`\n========================================`);
     console.log(`  Order confirmation for ${email}`);
     console.log(`  Order ID: ${orderId}`);
@@ -48,6 +46,18 @@ export async function sendOrderConfirmationEmail(
     console.log(`========================================\n`);
     return;
   }
+
+  // Lazy load nodemailer
+  const nodemailer = await import('nodemailer');
+  const transporter = nodemailer.default.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
 
   await transporter.sendMail({
     from: `"Galerie Varinchie" <${process.env.SMTP_USER}>`,
