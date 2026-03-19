@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
+// NOTE: runtime = 'edge' removed — xlsx library requires Node.js Buffer/zlib APIs
+// which are not available in V8 isolates. This route runs as Node.js serverless.
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
-// Lazy loaded XLSX inside handler to reduce bundle bloat
 
 export async function GET(request: NextRequest) {
   try {
@@ -63,4 +63,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
   }
 }
-

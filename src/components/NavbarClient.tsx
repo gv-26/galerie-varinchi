@@ -17,6 +17,22 @@ export default function Navbar({ categories }: { categories: Category[] }) {
   const { totalItems: wishlistCount } = useWishlist();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isArtist, setIsArtist] = useState(false);
+  const [localCategories, setLocalCategories] = useState<Category[]>(categories || []);
+
+  useEffect(() => {
+    if (!categories || categories.length === 0) {
+      fetch('/api/categories')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setLocalCategories(data.map((c: any) => ({ name: c.name, slug: c.slug })));
+          }
+        })
+        .catch(console.error);
+    } else {
+      setLocalCategories(categories);
+    }
+  }, [categories]);
 
   useEffect(() => {
     if (user && !user.isAdmin) {
@@ -45,7 +61,7 @@ export default function Navbar({ categories }: { categories: Category[] }) {
         </button>
 
         <div className={`nav-categories ${menuOpen ? 'open' : ''}`} style={{ display: 'flex', gap: 'var(--space-lg)', justifyContent: 'center', flex: '2' }}>
-          {categories.map(cat => (
+          {localCategories.map(cat => (
             <Link key={cat.slug} href={`/category/${cat.slug}`} onClick={() => setMenuOpen(false)} style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 600, color: 'var(--color-text)' }}>
               {cat.name}
             </Link>

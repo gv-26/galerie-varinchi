@@ -1,23 +1,22 @@
-import jwt from 'jsonwebtoken';
+import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { prisma } from './prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const getSecret = () => new TextEncoder().encode(
+  process.env.JWT_SECRET || 'dev-secret'
+);
 
-interface JwtPayload {
-  userId: string;
-  sessionId: string;
+export async function createToken(userId: string, sessionId: string): Promise<string> {
+  return new SignJWT({ userId, sessionId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('30d')
+    .sign(getSecret());
 }
 
-export function createToken(userId: string, sessionId: string): string {
-  return jwt.sign({ userId, sessionId } as JwtPayload, JWT_SECRET, {
-    expiresIn: '30d',
-  });
-}
-
-export function verifyToken(token: string): JwtPayload | null {
+export async function verifyToken(token: string): Promise<{ userId: string; sessionId: string } | null> {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const { payload } = await jwtVerify(token, getSecret());
+    return payload as { userId: string; sessionId: string };
   } catch {
     return null;
   }
@@ -29,7 +28,7 @@ export async function getCurrentUser() {
 
   if (!token) return null;
 
-  const payload = verifyToken(token);
+  const payload = await verifyToken(token);
   if (!payload) return null;
 
   const session = await prisma.session.findUnique({

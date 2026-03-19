@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "npx prisma generate && next build",
-    "build:pages": "npx prisma generate && next build --webpack && npx @cloudflare/next-on-pages",
+    "build:pages": "npx prisma generate && next build && npx @cloudflare/next-on-pages",
     "start": "next start",
     "lint": "eslint",
     "seed": "npx tsx prisma/seed.ts"
@@ -15,16 +15,19 @@
     "@prisma/adapter-neon": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "dotenv": "^17.3.1",
+    "jose": "^6.2.2",
     "jsonwebtoken": "^9.0.3",
     "next": "16.1.6",
     "nodemailer": "^8.0.2",
     "prisma": "^7.5.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "resend": "^6.9.4",
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.16",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",

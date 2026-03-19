@@ -59,8 +59,10 @@ export async function POST(request: Request) {
       },
     });
 
-    // Create JWT and set cookie
-    const token = createToken(user.id, session.id);
+    // Create JWT token (now async with jose)
+    const token = await createToken(user.id, session.id);
+
+    // Set cookie via next/headers (works in edge with nodejs_compat)
     const cookieStore = await cookies();
     cookieStore.set('auth-token', token, {
       httpOnly: true,
