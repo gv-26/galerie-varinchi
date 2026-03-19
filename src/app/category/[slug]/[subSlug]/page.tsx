@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import ProductCard from '@/components/ProductCard';
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
