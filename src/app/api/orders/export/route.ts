@@ -3,7 +3,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
-import * as XLSX from 'xlsx';
+// Lazy loaded XLSX inside handler to reduce bundle bloat
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       }))
     );
 
+    const XLSX = await import('xlsx');
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Orders');
@@ -62,3 +63,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
   }
 }
+
