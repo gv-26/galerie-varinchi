@@ -66,8 +66,8 @@ export default function ProductPage() {
         setProduct(data.product);
         if (Array.isArray(data.product.specifications) && data.product.specifications.length > 0) {
           const initialSpecs: Record<string, string> = {};
-          data.product.specifications.forEach((s: Specification) => {
-             if (s.options && s.options.length > 0) {
+          data.product.specifications.forEach((s: any) => {
+             if (s && s.name && Array.isArray(s.options) && s.options.length > 0) {
                initialSpecs[s.name] = s.options[0];
              }
           });
@@ -205,7 +205,7 @@ export default function ProductPage() {
                 <div key={spec.name} className="option-group">
                   <label>{spec.name}</label>
                   <div className="option-pills">
-                    {spec.options.map(opt => (
+                    {Array.isArray(spec.options) && spec.options.map(opt => (
                       <button
                         key={opt}
                         className={`option-pill ${selectedSpecs[spec.name] === opt ? 'selected' : ''}`}
