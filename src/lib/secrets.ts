@@ -7,6 +7,11 @@
  * Falls back to `process.env[name]` for local development.
  */
 export function getSecret(name: string): string | undefined {
+  // Try direct env var first
+  const directVar = process.env[name];
+  if (directVar) return directVar;
+
+  // Try SST resource link (Ion uses SST_RESOURCE_<NAME>)
   const sstVar = process.env[`SST_RESOURCE_${name}`];
   if (sstVar) {
     try {
@@ -16,5 +21,5 @@ export function getSecret(name: string): string | undefined {
       return sstVar;
     }
   }
-  return process.env[name];
+  return undefined;
 }

@@ -27,6 +27,13 @@ export default $config({
       link: [databaseUrl, jwtSecret, resendApiKey, awsAccessKeyId, awsSecretAccessKey, awsRegion, s3BucketName],
       environment: {
         NODE_ENV: "production",
+        DATABASE_URL: databaseUrl.value,
+        JWT_SECRET: jwtSecret.value,
+        RESEND_API_KEY: resendApiKey.value,
+        AWS_ACCESS_KEY_ID: awsAccessKeyId.value,
+        AWS_SECRET_ACCESS_KEY: awsSecretAccessKey.value,
+        AWS_REGION: awsRegion.value,
+        S3_BUCKET_NAME: s3BucketName.value,
       },
     });
   },
