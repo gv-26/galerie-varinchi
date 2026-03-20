@@ -7,11 +7,11 @@ import { createToken, getCurrentUser } from '@/lib/auth';
 import { sendOtpEmail, sendOrderConfirmationEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
 import crypto from 'crypto';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-let s3Client: S3Client | null = null;
-function getS3Client() {
+let s3Client: any = null;
+async function getS3Client() {
   if (!s3Client) {
+    const { S3Client } = await import('@aws-sdk/client-s3');
     s3Client = new S3Client({
       region: getSecret('AWS_REGION') || 'ap-south-1',
       credentials: {
@@ -49,7 +49,8 @@ async function uploadToS3(file: File): Promise<string> {
   const key = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
 
   try {
-    const s3 = getS3Client();
+    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    const s3 = await getS3Client();
     await s3.send(new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
