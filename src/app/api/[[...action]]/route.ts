@@ -96,6 +96,17 @@ async function uploadToS3(file: File): Promise<string> {
   const key = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
 
   try {
+    const accessKey = getSecret('AWS_ACCESS_KEY_ID');
+    const secretKey = getSecret('AWS_SECRET_ACCESS_KEY');
+    const sessionToken = getSecret('AWS_SESSION_TOKEN');
+
+    console.log("AWS DEBUG:", {
+      accessKeyStart: accessKey?.slice(0, 6),
+      accessKeyType: accessKey?.startsWith("AKIA") ? "IAM_USER" : "TEMP/ROLE",
+      hasSecret: !!secretKey,
+      hasSessionToken: !!sessionToken,
+    });
+
     const s3 = await getS3Client();
     await s3.send(new PutObjectCommand({
       Bucket: bucketName,
