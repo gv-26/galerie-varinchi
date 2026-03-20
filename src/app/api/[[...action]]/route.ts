@@ -40,6 +40,19 @@ const getImages = (jsonStr: string | null) => {
   }
 };
 
+const parseProduct = (p: any) => {
+  if (!p) return null;
+  return {
+    ...p,
+    mediums: getImages(p.mediums),
+    frameTypes: getImages(p.frameTypes),
+    frameColors: getImages(p.frameColors),
+    specifications: getImages(p.specifications),
+    priceModifiers: p.priceModifiers ? (typeof p.priceModifiers === 'string' ? JSON.parse(p.priceModifiers) : p.priceModifiers) : {},
+    image: getImages(p.images)[0] || p.image,
+  };
+};
+
 // Real S3 Upload implementation
 async function uploadToS3(file: File): Promise<string> {
   const bucketName = getSecret('S3_BUCKET_NAME');
@@ -87,13 +100,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           where: eq(schema.product.id, pId), 
           with: { subCategory: { with: { category: true } } } 
         });
-        return p ? NextResponse.json({ product: p }) : NextResponse.json({ error: 'Not found' }, { status: 404 });
+        return p ? NextResponse.json({ product: parseProduct(p) }) : NextResponse.json({ error: 'Not found' }, { status: 404 });
       }
       const list = await db.query.product.findMany({ 
         orderBy: [desc(schema.product.createdAt)], 
         with: { subCategory: { with: { category: true } } } 
       });
-      return NextResponse.json({ products: list });
+      return NextResponse.json({ products: list.map(parseProduct) });
     }
 
     // Public: Categories
@@ -513,7 +526,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         basePrice: body.price || body.basePrice || 0,
         image: body.image || (getImages(body.images)[0] || '')
       }).returning();
-      return NextResponse.json({ product: p }, { status: 201 });
+      return NextResponse.json({ product: parseProduct(p) }, { status: 201 });
     }
 
     if (action[0] === 'categories' && user?.isAdmin) {
@@ -559,7 +572,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (action[0] === 'products' && user?.isAdmin) {
       const id = new URL(request.url).searchParams.get('id') || action[1];
       const [p] = await db.update(schema.product).set(body).where(eq(schema.product.id, id)).returning();
-      return NextResponse.json({ product: p });
+      return NextResponse.json({ product: parseProduct(p) });
     }
     if (action[0] === 'subcategories' && user?.isAdmin) {
       const id = action[1];
@@ -585,7 +598,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       // Update Product status
       if (action[0] === 'products' && action[1]) {
         const [p] = await db.update(schema.product).set(body).where(eq(schema.product.id, action[1])).returning();
-        return NextResponse.json({ product: p });
+        return NextResponse.json({ product: parseProduct(p) });
       }
       // Update Order status
       if (action[0] === 'orders' && action[1]) {
