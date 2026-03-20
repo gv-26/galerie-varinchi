@@ -18,6 +18,10 @@ export default $config({
     const databaseUrl = new sst.Secret("DATABASE_URL");
     const jwtSecret = new sst.Secret("JWT_SECRET");
     const resendApiKey = new sst.Secret("RESEND_API_KEY");
+    const awsAccessKeyId = new sst.Secret("AWS_ACCESS_KEY_ID");
+    const awsSecretAccessKey = new sst.Secret("AWS_SECRET_ACCESS_KEY");
+    const awsRegion = new sst.Secret("AWS_REGION");
+    const s3BucketName = new sst.Secret("S3_BUCKET_NAME");
 
     new sst.aws.Nextjs("MyWeb", {
       environment: {
@@ -25,6 +29,10 @@ export default $config({
         DATABASE_URL: $interpolate`${databaseUrl.value}`,
         JWT_SECRET: $interpolate`${jwtSecret.value}`,
         RESEND_API_KEY: $interpolate`${resendApiKey.value}`,
+        AWS_ACCESS_KEY_ID: $interpolate`${awsAccessKeyId.value}`,
+        AWS_SECRET_ACCESS_KEY: $interpolate`${awsSecretAccessKey.value}`,
+        AWS_REGION: $interpolate`${awsRegion.value}`,
+        S3_BUCKET_NAME: $interpolate`${s3BucketName.value}`,
       },
     });
   },

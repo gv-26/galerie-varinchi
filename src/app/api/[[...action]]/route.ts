@@ -5,7 +5,17 @@ import * as schema from '@/db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { createToken, getCurrentUser } from '@/lib/auth';
 import { sendOtpEmail, sendOrderConfirmationEmail } from '@/lib/email';
+import { getSecret } from '@/lib/secrets';
 import crypto from 'crypto';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+
+const s3 = new S3Client({
+  region: getSecret('AWS_REGION') || 'ap-south-1',
+  credentials: {
+    accessKeyId: getSecret('AWS_ACCESS_KEY_ID') || '',
+    secretAccessKey: getSecret('AWS_SECRET_ACCESS_KEY') || '',
+  },
+});
 
 // Helper for safe JSON parsing of product images
 const getImages = (jsonStr: string | null) => {
@@ -18,14 +28,32 @@ const getImages = (jsonStr: string | null) => {
   }
 };
 
-// Simple S3 Upload placeholder (Since SDK might not be installed)
-// In a real scenario, we'd use @aws-sdk/client-s3
+// Real S3 Upload implementation
 async function uploadToS3(file: File): Promise<string> {
-  // For now, we will return a placeholder URL or a data URL if small, 
-  // but ideally we should have the SDK. 
-  // Let's assume the user will provide the SDK or we can use a mock for now.
-  console.log('Uploading file to S3:', file.name);
-  return `https://galerievarinchi-uploads.s3.amazonaws.com/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+  const bucketName = getSecret('S3_BUCKET_NAME');
+  const region = getSecret('AWS_REGION') || 'ap-south-1';
+  
+  if (!bucketName) {
+    console.warn('S3_BUCKET_NAME not set, falling back to placeholder');
+    return `https://galerievarinchi-placeholder.s3.amazonaws.com/${Date.now()}-${file.name}`;
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const key = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: file.type,
+    }));
+    return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
+  } catch (error) {
+    console.error('S3 Upload Error:', error);
+    throw new Error('Failed to upload file to S3');
+  }
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ action?: string[] }> }) {
