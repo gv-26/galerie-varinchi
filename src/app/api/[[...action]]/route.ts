@@ -30,27 +30,46 @@ async function getS3Client() {
 }
 
 // Helper for safe JSON parsing of product images
+// Helper to recursively parse JSON if it's multi-stringified
+const deepParse = (val: any) => {
+  if (!val || typeof val !== 'string') return val;
+  try {
+    let current = val;
+    // Limit iterations to prevent infinite loops if malformed
+    for (let i = 0; i < 5; i++) {
+       const parsed = JSON.parse(current);
+       if (typeof parsed === 'string') {
+         current = parsed;
+       } else {
+         return parsed;
+       }
+    }
+    return current;
+  } catch {
+    return val;
+  }
+};
+
 const getImages = (jsonStr: string | null) => {
   if (!jsonStr) return [];
-  try {
-    const parsed = JSON.parse(jsonStr);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const parsed = deepParse(jsonStr);
+  return Array.isArray(parsed) ? parsed : [];
 };
 
 const parseProduct = (p: any) => {
   if (!p) return null;
-  return {
+  const parsed = {
     ...p,
     mediums: getImages(p.mediums),
     frameTypes: getImages(p.frameTypes),
     frameColors: getImages(p.frameColors),
     specifications: getImages(p.specifications),
-    priceModifiers: p.priceModifiers ? (typeof p.priceModifiers === 'string' ? JSON.parse(p.priceModifiers) : p.priceModifiers) : {},
-    image: getImages(p.images)[0] || p.image,
+    priceModifiers: deepParse(p.priceModifiers) || {},
+    images: getImages(p.images),
   };
+  // Ensure image is the first one from images
+  parsed.image = (Array.isArray(parsed.images) && parsed.images.length > 0) ? parsed.images[0] : (p.image || '');
+  return parsed;
 };
 
 // Real S3 Upload implementation
