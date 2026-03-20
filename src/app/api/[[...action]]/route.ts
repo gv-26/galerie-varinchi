@@ -276,6 +276,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           s3Status = `error: ${s3Err.message}`;
         }
 
+        const testProduct = await db.query.product.findFirst({
+          where: eq(schema.product.id, 'fb007f79-22d0-499f-9443-596e7db6efa1')
+        });
+
         return NextResponse.json({ 
           status: 'ok', 
           db: 'connected', 
@@ -285,6 +289,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             accessKeyLength: (getSecret('AWS_ACCESS_KEY_ID') || '').length,
             hasSecret: !!getSecret('AWS_SECRET_ACCESS_KEY'),
             hasSessionToken: !!getSecret('AWS_SESSION_TOKEN'),
+          },
+          debug: {
+            rawSpecs: testProduct?.specifications || null,
+            parsedSpecs: testProduct ? parseProduct(testProduct).specifications : null,
           },
           time: new Date().toISOString() 
         });
