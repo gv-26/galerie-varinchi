@@ -10,19 +10,22 @@ import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
 
+function getAwsCredentials() {
+  return {
+    accessKeyId: process.env.MY_AWS_ACCESS_KEY_ID || getSecret('AWS_ACCESS_KEY_ID') || '',
+    secretAccessKey: process.env.MY_AWS_SECRET_ACCESS_KEY || getSecret('AWS_SECRET_ACCESS_KEY') || '',
+  };
+}
+
 let s3Client: any = null;
 async function getS3Client() {
   if (!s3Client) {
-    const accessKeyId = getSecret('AWS_ACCESS_KEY_ID') || '';
-    const secretAccessKey = getSecret('AWS_SECRET_ACCESS_KEY') || '';
-    const sessionToken = getSecret('AWS_SESSION_TOKEN');
-
+    const creds = getAwsCredentials();
     s3Client = new S3Client({
       region: getSecret('AWS_REGION') || 'ap-south-1',
       credentials: {
-        accessKeyId,
-        secretAccessKey,
-        ...(sessionToken ? { sessionToken } : {}),
+        accessKeyId: creds.accessKeyId,
+        secretAccessKey: creds.secretAccessKey,
       },
     });
   }
@@ -103,8 +106,6 @@ async function uploadToS3(file: File): Promise<string> {
     console.log("AWS DEBUG:", {
       accessKeyStart: accessKey?.slice(0, 6),
       accessKeyType: accessKey?.startsWith("AKIA") ? "IAM_USER" : "TEMP/ROLE",
-      hasSecret: !!secretKey,
-      hasSessionToken: !!sessionToken,
     });
 
     const s3 = await getS3Client();

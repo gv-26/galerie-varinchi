@@ -24,8 +24,7 @@ export function getSecret(name: string): string | undefined {
     if (myRegionVar) return myRegionVar;
   }
   if (name === 'AWS_SESSION_TOKEN') {
-    const mySessionVar = process.env['MY_AWS_SESSION_TOKEN'];
-    if (mySessionVar) return mySessionVar;
+    return undefined;
   }
 
   // Try direct env var next
