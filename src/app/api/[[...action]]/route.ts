@@ -235,12 +235,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
-    // Debug Keys (Safe: only returns keys, not values)
-    if (action[0] === 'debug' && action[1] === 'keys') {
-      const keys = Object.keys(process.env).sort();
-      return NextResponse.json({ keys, node_env: process.env.NODE_ENV });
-    }
-
     return NextResponse.json({ error: 'Not Found' }, { status: 404 });
   } catch (error: any) { 
     console.error('GET Error:', error);
