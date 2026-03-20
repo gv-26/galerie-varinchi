@@ -7,12 +7,12 @@ import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { createToken, getCurrentUser } from '@/lib/auth';
 import { sendOtpEmail, sendOrderConfirmationEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
 
 let s3Client: any = null;
 async function getS3Client() {
   if (!s3Client) {
-    const { S3Client } = await import('@aws-sdk/client-s3');
     const accessKeyId = getSecret('AWS_ACCESS_KEY_ID') || '';
     const secretAccessKey = getSecret('AWS_SECRET_ACCESS_KEY') || '';
     const sessionToken = getSecret('AWS_SESSION_TOKEN');
@@ -96,7 +96,6 @@ async function uploadToS3(file: File): Promise<string> {
   const key = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
 
   try {
-    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
     const s3 = await getS3Client();
     await s3.send(new PutObjectCommand({
       Bucket: bucketName,
@@ -385,8 +384,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // Generic Upload
       if (action[0] === 'upload' && user?.isAdmin) {
-        const file = formData.get('file') as File;
-        if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 });
+        const file = formData.get('file');
+        if (!file || !(file instanceof File)) {
+          return NextResponse.json({ error: 'No valid file provided' }, { status: 400 });
+        }
         const url = await uploadToS3(file);
         return NextResponse.json({ url });
       }
