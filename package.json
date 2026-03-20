@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "cross-env NEXT_DISABLE_TURBOPACK=1 next build",
     "db:pull": "npx drizzle-kit pull",
     "db:push": "npx drizzle-kit push",
     "db:studio": "npx drizzle-kit studio",
@@ -26,6 +26,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",

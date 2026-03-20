@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
@@ -228,7 +229,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (action[0] === 'health') {
       try {
         await db.select({ count: sql`count(*)` }).from(schema.user).limit(1);
-        return NextResponse.json({ status: 'ok', db: 'connected', time: new Date().toISOString() });
+        
+        // Test S3 SDK loadability
+        let s3Status = 'not_tested';
+        try {
+          await getS3Client();
+          s3Status = 'loadable';
+        } catch (s3Err: any) {
+          s3Status = `error: ${s3Err.message}`;
+        }
+
+        return NextResponse.json({ 
+          status: 'ok', 
+          db: 'connected', 
+          s3: s3Status,
+          time: new Date().toISOString() 
+        });
       } catch (e: any) {
         console.error('Health Check Failure:', e);
         return NextResponse.json({ status: 'error', message: e.message }, { status: 500 });
