@@ -31,18 +31,25 @@ async function getS3Client() {
 
 // Helper for safe JSON parsing of product images
 // Helper to recursively parse JSON if it's multi-stringified
-const deepParse = (val: any) => {
+const deepParse = (val: any): any => {
   if (!val || typeof val !== 'string') return val;
   try {
     let current = val;
-    // Limit iterations to prevent infinite loops if malformed
     for (let i = 0; i < 5; i++) {
        const parsed = JSON.parse(current);
        if (typeof parsed === 'string') {
          current = parsed;
-       } else {
-         return parsed;
+         continue;
        }
+       // Special case: Single key containing JSON (product data corruption fix)
+       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+         const keys = Object.keys(parsed);
+         if (keys.length === 1 && keys[0].startsWith('{') && keys[0].endsWith('}')) {
+           current = keys[0];
+           continue;
+         }
+       }
+       return parsed;
     }
     return current;
   } catch {
@@ -50,10 +57,12 @@ const deepParse = (val: any) => {
   }
 };
 
-const getImages = (jsonStr: string | null) => {
+const getImages = (jsonStr: string | null): any[] => {
   if (!jsonStr) return [];
   const parsed = deepParse(jsonStr);
-  return Array.isArray(parsed) ? parsed : [];
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object') return [parsed]; // Wrap single objects (e.g. specs)
+  return [];
 };
 
 const parseProduct = (p: any) => {
