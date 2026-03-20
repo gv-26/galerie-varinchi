@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import ProductCard from '@/components/ProductCard';
 import { db } from '@/db';
 import { category as categorySchema, subCategory as subCategorySchema, product as productSchema } from '@/db/schema';

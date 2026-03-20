@@ -15,6 +15,17 @@ export default $config({
     };
   },
   async run() {
-    new sst.aws.Nextjs("MyWeb");
+    const databaseUrl = new sst.Secret("DATABASE_URL");
+    const jwtSecret = new sst.Secret("JWT_SECRET");
+    const resendApiKey = new sst.Secret("RESEND_API_KEY");
+
+    new sst.aws.Nextjs("MyWeb", {
+      environment: {
+        NODE_ENV: "production",
+        DATABASE_URL: $interpolate`${databaseUrl.value}`,
+        JWT_SECRET: $interpolate`${jwtSecret.value}`,
+        RESEND_API_KEY: $interpolate`${resendApiKey.value}`,
+      },
+    });
   },
 });

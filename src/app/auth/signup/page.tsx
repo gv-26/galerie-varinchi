@@ -40,10 +40,10 @@ export default function SignUpPage() {
     setLoading(true);
     setError('');
 
-    const res = await fetch('/api/auth/verify-otp', {
+    const res = await fetch('/api/auth/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp, isSignup: true }),
+      body: JSON.stringify({ email, otp }),
     });
 
     const data = await res.json();

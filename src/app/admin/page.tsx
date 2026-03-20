@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-export const runtime = 'edge';
 import { getCurrentUser } from '@/lib/auth';
 
 export default async function AdminPage() {

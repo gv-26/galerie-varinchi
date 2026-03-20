@@ -40,10 +40,10 @@ export default function SignInPage() {
     setLoading(true);
     setError('');
 
-    const res = await fetch('/api/auth/verify-otp', {
+    const res = await fetch('/api/auth/signin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp, isSignup: false }),
+      body: JSON.stringify({ email, otp }),
     });
 
     const data = await res.json();

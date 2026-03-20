@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import Link from 'next/link';
 import ProductCard from '@/components/ProductCard';
 import { db } from '@/db';

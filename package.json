@@ -19,8 +19,7 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "resend": "^6.9.4",
-    "sst": "4.5.0"
+    "resend": "^6.9.4"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -29,6 +28,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "sst": "^4.5.0",
     "typescript": "^5"
   }
 }

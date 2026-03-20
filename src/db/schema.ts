@@ -31,7 +31,7 @@ export const subCategory = pgTable("SubCategory", {
 
 export const otpToken = pgTable("OtpToken", {
 	id: text().primaryKey().notNull(),
-	email: text().notNull(),
+	email: text().notNull().unique(),
 	otp: text().notNull(),
 	expiresAt: timestamp({ precision: 3, mode: 'string' }).notNull(),
 	used: boolean().default(false).notNull(),

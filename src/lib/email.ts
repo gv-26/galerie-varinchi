@@ -1,5 +1,9 @@
+import { getSecret } from './secrets';
+
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = getSecret('RESEND_API_KEY');
+
+  if (!apiKey) {
     // Dev mode: log to console instead of sending
     console.log(`\n========================================`);
     console.log(`  [DEV EMAIL] To: ${to}`);
@@ -8,15 +12,28 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
     return;
   }
 
-  const { Resend } = await import('resend');
-  const resend = new Resend(process.env.RESEND_API_KEY);
-
-  await resend.emails.send({
-    from: 'Galerie Varinchie <noreply@galerievarinchie.com>',
-    to,
-    subject,
-    html,
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Galerie Varinchie <noreply@galerievarinchi.com>',
+      to,
+      subject,
+      html,
+    }),
   });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error('[Resend HTTP Error]', response.status, errorBody);
+    throw new Error(`Resend error: ${response.statusText} - ${errorBody}`);
+  }
+
+  const data = await response.json();
+  console.log('[Resend] Email sent successfully, id:', data?.id);
 }
 
 export async function sendOtpEmail(email: string, otp: string): Promise<void> {
