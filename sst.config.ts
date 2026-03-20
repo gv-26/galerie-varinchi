@@ -24,7 +24,6 @@ export default $config({
     const s3BucketName = new sst.Secret("S3_BUCKET_NAME");
 
     new sst.aws.Nextjs("MyWeb", {
-      link: [databaseUrl, jwtSecret, resendApiKey, awsAccessKeyId, awsSecretAccessKey, awsRegion, s3BucketName],
       environment: {
         NODE_ENV: "production",
         DATABASE_URL: databaseUrl.value,
