@@ -37,7 +37,8 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
 }
 
 export async function sendOtpEmail(email: string, otp: string): Promise<void> {
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
     console.log(`\n========================================`);
     console.log(`  OTP for ${email}: ${otp}`);
     console.log(`========================================\n`);
@@ -63,7 +64,8 @@ export async function sendOrderConfirmationEmail(
   orderId: string,
   totalAmount: number
 ): Promise<void> {
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
     console.log(`\n========================================`);
     console.log(`  Order confirmation for ${email}`);
     console.log(`  Order ID: ${orderId}`);
