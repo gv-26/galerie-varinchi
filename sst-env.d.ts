@@ -30,6 +30,10 @@ declare module "sst" {
       "type": "sst.aws.Nextjs"
       "url": string
     }
+    "MyWebAssets": {
+      "name": string
+      "type": "sst.aws.Bucket"
+    }
     "RESEND_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string

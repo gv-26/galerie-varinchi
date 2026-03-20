@@ -22,62 +22,17 @@ export default $config({
     const awsSecretAccessKey = new sst.Secret("AWS_SECRET_ACCESS_KEY");
     const awsRegion = new sst.Secret("AWS_REGION");
 
-    const bucket = new sst.aws.Bucket("MyWebAssets");
+    const bucket = new sst.aws.Bucket("MyWebAssets", {
+      access: "cloudfront",
+    });
     
-    // CloudFront OAC for S3
-    const oac = new aws.cloudfront.OriginAccessControl("MyWebAssetsOAC", {
-      originAccessControlOriginType: "s3",
-      signingBehavior: "always",
-      signingProtocol: "sigv4",
-    });
-
-    const distribution = new aws.cloudfront.Distribution("MyWebCdn", {
-      enabled: true,
-      origins: [
-        {
-          originId: "s3Origin",
-          domainName: bucket.nodes.bucket.bucketRegionalDomainName,
-          originAccessControlId: oac.id,
-        },
-      ],
-      defaultCacheBehavior: {
-        targetOriginId: "s3Origin",
-        viewerProtocolPolicy: "redirect-to-https",
-        allowedMethods: ["GET", "HEAD"],
-        cachedMethods: ["GET", "HEAD"],
-        cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6", // CachingOptimized
-      },
-      restrictions: {
-        geoRestriction: {
-          restrictionType: "none",
-        },
-      },
-      viewerCertificate: {
-        cloudfrontDefaultCertificate: true,
-      },
-    });
-
-    // Custom Bucket Policy for OAC
-    new aws.s3.BucketPolicy("MyWebAssetsPolicy", {
-      bucket: bucket.name,
-      policy: $util.all([bucket.arn, distribution.id, aws.getCallerIdentity({})]).apply(([bucketArn, distId, caller]: [string, string, any]) => JSON.stringify({
-        Version: "2012-10-17",
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: {
-              Service: "cloudfront.amazonaws.com"
-            },
-            Action: "s3:GetObject",
-            Resource: `${bucketArn}/*`,
-            Condition: {
-              StringEquals: {
-                "AWS:SourceArn": `arn:aws:cloudfront::${caller.accountId}:distribution/${distId}`
-              }
-            }
-          }
-        ]
-      })),
+    const router = new sst.aws.Router("MyWebCdn", {
+      routes: {
+        "/*": {
+          bucket,
+          cachePolicy: "658327ea-f89d-4fab-a63d-7e88639e58f6", // CachingOptimized
+        }
+      }
     });
 
     new sst.aws.Nextjs("MyWeb", {
@@ -91,7 +46,7 @@ export default $config({
         MY_AWS_SECRET_ACCESS_KEY: awsSecretAccessKey.value,
         MY_AWS_REGION: awsRegion.value,
         S3_BUCKET_NAME: bucket.name,
-        CLOUDFRONT_URL: $interpolate`https://${distribution.domainName}`,
+        CLOUDFRONT_URL: router.url,
       },
     });
   },
