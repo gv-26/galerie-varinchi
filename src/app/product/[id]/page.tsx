@@ -64,7 +64,7 @@ export default function ProductPage() {
       .then(res => res.json())
       .then(data => {
         setProduct(data.product);
-        if (data.product.specifications && data.product.specifications.length > 0) {
+        if (Array.isArray(data.product.specifications) && data.product.specifications.length > 0) {
           const initialSpecs: Record<string, string> = {};
           data.product.specifications.forEach((s: Specification) => {
              if (s.options && s.options.length > 0) {
@@ -104,14 +104,14 @@ export default function ProductPage() {
     );
   }
 
-  const hasDynamicSpecs = product.specifications && product.specifications.length > 0;
+  const hasDynamicSpecs = Array.isArray(product.specifications) && product.specifications.length > 0;
 
   const calculatePrice = () => {
     let price = product.basePrice;
     const modifiers = product.priceModifiers;
 
     if (hasDynamicSpecs) {
-      const comboName = product.specifications!.map(s => selectedSpecs[s.name] || '').filter(Boolean).join(' | ');
+      const comboName = (product.specifications as Specification[]).map(s => selectedSpecs[s.name] || '').filter(Boolean).join(' | ');
       if (modifiers && modifiers[comboName] !== undefined) {
         return Number(modifiers[comboName]);
       }
@@ -201,7 +201,7 @@ export default function ProductPage() {
 
             {hasDynamicSpecs ? (
               // Dynamic Specs Render
-              product.specifications!.map(spec => (
+              (product.specifications as Specification[]).map(spec => (
                 <div key={spec.name} className="option-group">
                   <label>{spec.name}</label>
                   <div className="option-pills">

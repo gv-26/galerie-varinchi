@@ -13,11 +13,16 @@ let s3Client: any = null;
 async function getS3Client() {
   if (!s3Client) {
     const { S3Client } = await import('@aws-sdk/client-s3');
+    const accessKeyId = getSecret('AWS_ACCESS_KEY_ID') || '';
+    const secretAccessKey = getSecret('AWS_SECRET_ACCESS_KEY') || '';
+    const sessionToken = getSecret('AWS_SESSION_TOKEN');
+
     s3Client = new S3Client({
       region: getSecret('AWS_REGION') || 'ap-south-1',
       credentials: {
-        accessKeyId: getSecret('AWS_ACCESS_KEY_ID') || '',
-        secretAccessKey: getSecret('AWS_SECRET_ACCESS_KEY') || '',
+        accessKeyId,
+        secretAccessKey,
+        ...(sessionToken ? { sessionToken } : {}),
       },
     });
   }
@@ -243,6 +248,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           status: 'ok', 
           db: 'connected', 
           s3: s3Status,
+          aws: {
+            accessKeyPrefix: (getSecret('AWS_ACCESS_KEY_ID') || '').substring(0, 4),
+            accessKeyLength: (getSecret('AWS_ACCESS_KEY_ID') || '').length,
+            hasSecret: !!getSecret('AWS_SECRET_ACCESS_KEY'),
+            hasSessionToken: !!getSecret('AWS_SESSION_TOKEN'),
+          },
           time: new Date().toISOString() 
         });
       } catch (e: any) {
