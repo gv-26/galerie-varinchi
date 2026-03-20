@@ -23,7 +23,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
     },
     signal: controller.signal,
     body: JSON.stringify({
-      from: 'Galerie Varinchie <onboarding@resend.dev>',
+      from: 'Galerie Varinchie <noreply@galerievarinchi.com>',
       to,
       subject,
       html,
