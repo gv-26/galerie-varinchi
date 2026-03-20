@@ -237,7 +237,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     // Debug Keys (Safe: only returns keys, not values)
     if (action[0] === 'debug' && action[1] === 'keys') {
-      const keys = Object.keys(process.env).filter(k => k.startsWith('SST_RESOURCE_'));
+      const keys = Object.keys(process.env).sort();
       return NextResponse.json({ keys, node_env: process.env.NODE_ENV });
     }
 
