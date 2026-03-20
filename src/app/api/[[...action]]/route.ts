@@ -9,13 +9,19 @@ import { getSecret } from '@/lib/secrets';
 import crypto from 'crypto';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-const s3 = new S3Client({
-  region: getSecret('AWS_REGION') || 'ap-south-1',
-  credentials: {
-    accessKeyId: getSecret('AWS_ACCESS_KEY_ID') || '',
-    secretAccessKey: getSecret('AWS_SECRET_ACCESS_KEY') || '',
-  },
-});
+let s3Client: S3Client | null = null;
+function getS3Client() {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      region: getSecret('AWS_REGION') || 'ap-south-1',
+      credentials: {
+        accessKeyId: getSecret('AWS_ACCESS_KEY_ID') || '',
+        secretAccessKey: getSecret('AWS_SECRET_ACCESS_KEY') || '',
+      },
+    });
+  }
+  return s3Client;
+}
 
 // Helper for safe JSON parsing of product images
 const getImages = (jsonStr: string | null) => {
@@ -43,6 +49,7 @@ async function uploadToS3(file: File): Promise<string> {
   const key = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
 
   try {
+    const s3 = getS3Client();
     await s3.send(new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
@@ -216,6 +223,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
        }
     }
 
+    // Health Check
+    if (action[0] === 'health') {
+      try {
+        await db.select({ count: sql`count(*)` }).from(schema.user).limit(1);
+        return NextResponse.json({ status: 'ok', db: 'connected', time: new Date().toISOString() });
+      } catch (e: any) {
+        console.error('Health Check Failure:', e);
+        return NextResponse.json({ status: 'error', message: e.message }, { status: 500 });
+      }
+    }
+
+    // Debug Keys (Safe: only returns keys, not values)
+    if (action[0] === 'debug' && action[1] === 'keys') {
+      const keys = Object.keys(process.env).filter(k => k.startsWith('SST_RESOURCE_'));
+      return NextResponse.json({ keys, node_env: process.env.NODE_ENV });
+    }
+
     return NextResponse.json({ error: 'Not Found' }, { status: 404 });
   } catch (error: any) { 
     console.error('GET Error:', error);
@@ -315,14 +339,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const otp = body.otp?.trim();
       
       if (action[1] === 'signin' || action[1] === 'signup' || action[1] === 'otp' || action[1] === 'verify-otp') {
-        if (!otp) {
-          const code = Math.floor(100000 + Math.random() * 900000).toString();
-          const newExpiresAt = new Date(Date.now() + 600000).toISOString();
-          await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
-            .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
-          await sendOtpEmail(email, code);
-          return NextResponse.json({ message: 'Sent' });
-        }
+         if (!otp) {
+           console.log('[Auth] Generating OTP for:', email);
+           const code = Math.floor(100000 + Math.random() * 900000).toString();
+           const newExpiresAt = new Date(Date.now() + 600000).toISOString();
+           try {
+             await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
+               .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
+             console.log('[Auth] OTP stored in DB');
+             await sendOtpEmail(email, code);
+             console.log('[Auth] OTP email sent');
+             return NextResponse.json({ message: 'Sent' });
+           } catch (dbErr: any) {
+             console.error('[Auth] DB/Email Error:', dbErr);
+             throw dbErr;
+           }
+         }
         
         const record = await db.query.otpToken.findFirst({ 
           where: eq(schema.otpToken.email, email), 

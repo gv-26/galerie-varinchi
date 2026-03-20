@@ -12,19 +12,23 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
     return;
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
+    signal: controller.signal,
     body: JSON.stringify({
-      from: 'Galerie Varinchie <noreply@galerievarinchi.com>',
+      from: 'Galerie Varinchie <onboarding@resend.dev>',
       to,
       subject,
       html,
     }),
-  });
+  }).finally(() => clearTimeout(timeoutId));
 
   if (!response.ok) {
     const errorBody = await response.text();
