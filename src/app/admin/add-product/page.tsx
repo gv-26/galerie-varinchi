@@ -424,7 +424,7 @@ function AddProductContent() {
               )}
             </div>
 
-            <button className="btn btn-primary btn-full" type="submit" disabled={loading || !subCategoryId} style={{ marginTop: 'var(--space-lg)' }}>
+            <button className="btn btn-primary btn-full" type="submit" disabled={loading || uploading || !subCategoryId} style={{ marginTop: 'var(--space-lg)' }}>
               {loading ? <span className="spinner"></span> : 'Add Product'}
             </button>
           </form>

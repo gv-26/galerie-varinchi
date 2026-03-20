@@ -529,7 +529,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
              title: artReq.title,
              description: artReq.description,
              basePrice: artReq.price,
-             image: imageUrls[0] || '',
+             image: imageUrls[0] || '/images/placeholder.jpg',
              images: artReq.images,
              status: 'active',
              subCategoryId: artReq.subCategoryId,
@@ -550,7 +550,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         id: crypto.randomUUID(), 
         status: 'active',
         basePrice: body.price || body.basePrice || 0,
-        image: body.image || (getImages(body.images)[0] || '')
+        image: body.image || (getImages(body.images)[0] || '/images/placeholder.jpg')
       }).returning();
       return NextResponse.json({ product: parseProduct(p) }, { status: 201 });
     }
