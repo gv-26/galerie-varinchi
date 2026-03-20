@@ -115,6 +115,10 @@ async function uploadToS3(file: File): Promise<string> {
       Body: buffer,
       ContentType: file.type,
     }));
+    const cdnUrl = getSecret('CLOUDFRONT_URL');
+    if (cdnUrl) {
+      return `${cdnUrl}/${key}`;
+    }
     return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
   } catch (error) {
     console.error('S3 Upload Error:', error);
