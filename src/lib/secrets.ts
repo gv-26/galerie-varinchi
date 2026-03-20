@@ -11,11 +11,11 @@ export function getSecret(name: string): string | undefined {
   const directVar = process.env[name];
   if (directVar) return directVar;
   
-  if (name === 'RESEND_API_KEY') {
-    const myResendVar = process.env['MY_RESEND_API_KEY'];
-    if (myResendVar) return myResendVar;
-  }
-
+  if (name === 'RESEND_API_KEY') return process.env['MY_RESEND_API_KEY'];
+  if (name === 'AWS_ACCESS_KEY_ID') return process.env['MY_AWS_ACCESS_KEY_ID'];
+  if (name === 'AWS_SECRET_ACCESS_KEY') return process.env['MY_AWS_SECRET_ACCESS_KEY'];
+  if (name === 'AWS_REGION') return process.env['MY_AWS_REGION'];
+  
   // Try SST resource link (Ion uses SST_RESOURCE_<NAME>)
   const sstVar = process.env[`SST_RESOURCE_${name}`];
   if (sstVar) {
