@@ -146,11 +146,11 @@ export default function ProfilePage() {
 
         <div className="profile-card">
           <h3>Recent Orders</h3>
-          {orders.length === 0 ? (
+          {(orders || []).length === 0 ? (
             <p className="text-muted text-sm">No orders yet. <Link href="/" style={{ color: 'var(--color-accent)' }}>Browse our collections</Link></p>
           ) : (
             <>
-              {orders.map(order => (
+              {(orders || []).map(order => (
                 <div key={order.id} style={{
                   padding: 'var(--space-md) 0',
                   borderBottom: '1px solid var(--color-border-light)',
@@ -168,8 +168,8 @@ export default function ProfilePage() {
                       {STATUS_LABELS[order.status]}
                     </span>
                   </div>
-                  <p className="text-sm text-muted">
-                    {order.items.map(item => `${item.product.title} × ${item.quantity}`).join(', ')}
+                   <p className="text-sm text-muted">
+                    {(order?.items || []).map(item => `${item?.product?.title || 'Unknown Product'} × ${item?.quantity || 0}`).join(', ')}
                   </p>
                   <p className="text-sm" style={{ fontWeight: 500 }}>₹{order.totalAmount.toLocaleString()}</p>
                 </div>

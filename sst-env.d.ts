@@ -6,42 +6,6 @@
 
 declare module "sst" {
   export interface Resource {
-    "AWS_ACCESS_KEY_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "AWS_REGION": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "AWS_SECRET_ACCESS_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "DATABASE_URL": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "JWT_SECRET": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "MyWeb": {
-      "type": "sst.aws.Nextjs"
-      "url": string
-    }
-    "MyWebAssets": {
-      "name": string
-      "type": "sst.aws.Bucket"
-    }
-    "RESEND_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "S3_BUCKET_NAME": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
   }
 }
 /// <reference path="sst-env.d.ts" />

@@ -19,7 +19,7 @@ export default function TestimonialsClient() {
         const res = await fetch('/api/testimonials');
         if (res.ok) {
           const data = await res.json();
-          setTestimonials(data);
+          setTestimonials(Array.isArray(data) ? data : []);
         }
       } catch (error) {
         console.error('Failed to fetch testimonials:', error);
@@ -30,7 +30,7 @@ export default function TestimonialsClient() {
     fetchTestimonials();
   }, []);
 
-  if (loading || testimonials.length === 0) return null;
+  if (loading || !Array.isArray(testimonials) || testimonials.length === 0) return null;
 
   return (
     <section style={{ padding: 'var(--space-2xl) 0 var(--space-4xl)', background: 'var(--color-bg)' }}>

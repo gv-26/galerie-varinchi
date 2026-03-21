@@ -63,8 +63,8 @@ export default function ProductPage() {
     fetch(`/api/products/${id}`)
       .then(res => res.json())
       .then(data => {
-        setProduct(data.product);
-        if (Array.isArray(data.product.specifications) && data.product.specifications.length > 0) {
+        setProduct(data?.product || null);
+        if (data?.product && Array.isArray(data.product.specifications) && data.product.specifications.length > 0) {
           const initialSpecs: Record<string, string> = {};
           data.product.specifications.forEach((s: any) => {
              if (s && s.name && Array.isArray(s.options) && s.options.length > 0) {
@@ -111,7 +111,7 @@ export default function ProductPage() {
     const modifiers = product.priceModifiers;
 
     if (hasDynamicSpecs) {
-      const comboName = (product.specifications as Specification[]).map(s => selectedSpecs[s.name] || '').filter(Boolean).join(' | ');
+      const comboName = (product?.specifications || []).map((s: any) => selectedSpecs[s?.name] || '').filter(Boolean).join(' | ');
       if (modifiers && modifiers[comboName] !== undefined) {
         return Number(modifiers[comboName]);
       }
@@ -201,11 +201,11 @@ export default function ProductPage() {
 
             {hasDynamicSpecs ? (
               // Dynamic Specs Render
-              (product.specifications as Specification[]).map(spec => (
-                <div key={spec.name} className="option-group">
-                  <label>{spec.name}</label>
+              (product?.specifications || []).map((spec: any) => (
+                <div key={spec?.name} className="option-group">
+                  <label>{spec?.name}</label>
                   <div className="option-pills">
-                    {Array.isArray(spec.options) && spec.options.map(opt => (
+                    {(spec?.options || []).map((opt: string) => (
                       <button
                         key={opt}
                         className={`option-pill ${selectedSpecs[spec.name] === opt ? 'selected' : ''}`}
@@ -224,7 +224,7 @@ export default function ProductPage() {
                   <div className="option-group">
                     <label>Medium</label>
                     <div className="option-pills">
-                      {product.mediums.map(medium => (
+                      {(product?.mediums || []).map(medium => (
                         <button
                           key={medium}
                           className={`option-pill ${selectedMedium === medium ? 'selected' : ''}`}
@@ -241,7 +241,7 @@ export default function ProductPage() {
                   <div className="option-group">
                     <label>Frame Type</label>
                     <div className="option-pills">
-                      {product.frameTypes.map(frame => (
+                      {(product?.frameTypes || []).map(frame => (
                         <button
                           key={frame}
                           className={`option-pill ${selectedFrame === frame ? 'selected' : ''}`}
@@ -261,7 +261,7 @@ export default function ProductPage() {
                   <div className="option-group">
                     <label>Frame Color</label>
                     <div className="color-swatches">
-                      {product.frameColors.map(color => (
+                      {(product?.frameColors || []).map(color => (
                         <button
                           key={color}
                           className={`color-swatch ${selectedColor === color ? 'selected' : ''}`}

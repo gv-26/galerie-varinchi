@@ -18,36 +18,39 @@ export default $config({
     const databaseUrl = new sst.Secret("DATABASE_URL");
     const jwtSecret = new sst.Secret("JWT_SECRET");
     const resendApiKey = new sst.Secret("RESEND_API_KEY");
-    const awsAccessKeyId = new sst.Secret("AWS_ACCESS_KEY_ID");
-    const awsSecretAccessKey = new sst.Secret("AWS_SECRET_ACCESS_KEY");
-    const awsRegion = new sst.Secret("AWS_REGION");
+    const nextPublicCloudfrontUrl = new sst.Secret("NEXT_PUBLIC_CLOUDFRONT_URL");
 
     const bucket = new sst.aws.Bucket("MyWebAssets", {
       access: "cloudfront",
     });
-    
-    const router = new sst.aws.Router("MyWebCdn", {
-      routes: {
-        "/*": {
-          bucket,
-          cachePolicy: "658327ea-f89d-4fab-a63d-7e88639e58f6", // CachingOptimized
-        }
-      }
-    });
 
-    new sst.aws.Nextjs("MyWeb", {
-      link: [bucket],
+    const isProd = $app.stage === "production";
+
+    const app = new sst.aws.Nextjs("MyWeb", {
+      link: [bucket, databaseUrl, jwtSecret, resendApiKey, nextPublicCloudfrontUrl],
       environment: {
-        NODE_ENV: "production",
+        S3_BUCKET_NAME: bucket.name,
         DATABASE_URL: databaseUrl.value,
         JWT_SECRET: jwtSecret.value,
-        MY_RESEND_API_KEY: resendApiKey.value,
-        MY_AWS_ACCESS_KEY_ID: awsAccessKeyId.value,
-        MY_AWS_SECRET_ACCESS_KEY: awsSecretAccessKey.value,
-        MY_AWS_REGION: awsRegion.value,
-        S3_BUCKET_NAME: bucket.name,
-        CLOUDFRONT_URL: router.url,
+        RESEND_API_KEY: resendApiKey.value,
+        NEXT_PUBLIC_CLOUDFRONT_URL: nextPublicCloudfrontUrl.value,
       },
     });
+
+    const router = new sst.aws.Router("MyWebCdn", {
+      domain: isProd ? {
+        name: "galerievarinchi.com",
+        dns: false,
+        cert: "arn:aws:acm:us-east-1:531472034733:certificate/a93810e5-6295-46cf-9442-e6c80f3c0654",
+        aliases: ["www.galerievarinchi.com"]
+      } : undefined,
+      routes: {
+        "/assets/*": {
+          bucket: bucket,
+        },
+        "/*": app.url,
+      }
+    });
   },
+
 });

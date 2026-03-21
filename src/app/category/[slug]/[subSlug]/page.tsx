@@ -27,8 +27,15 @@ export default async function SubCategoryPage({
     },
   });
 
-  if (!category || category.subCategories.length === 0) {
-    notFound();
+  if (!category || (category.subCategories || []).length === 0) {
+    return (
+      <div className="page-content">
+        <div className="container empty-state">
+          <h2>Collection Not Found</h2>
+          <p>We couldn&apos;t find this sub-collection.</p>
+        </div>
+      </div>
+    );
   }
 
   const subCategory = category.subCategories[0];
@@ -56,7 +63,7 @@ export default async function SubCategoryPage({
           </div>
         ) : (
           <div className="product-grid">
-            {subCategory.products.map((product: any) => (
+            {(subCategory?.products || []).map((product: any) => (
               <ProductCard
                 key={product.id}
                 id={product.id}

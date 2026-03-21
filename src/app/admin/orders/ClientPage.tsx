@@ -70,10 +70,10 @@ export default function OrdersPage() {
   }, [fetchOrders]);
 
   const toggleSelectAll = () => {
-    if (selected.size === orders.length) {
+    if (selected.size === (orders || []).length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(orders.map(o => o.id)));
+      setSelected(new Set((orders || []).map(o => o.id)));
     }
   };
 
@@ -159,7 +159,7 @@ export default function OrdersPage() {
                   <th>
                     <input
                       type="checkbox"
-                      checked={selected.size === orders.length && orders.length > 0}
+                      checked={selected.size === (orders || []).length && (orders || []).length > 0}
                       onChange={toggleSelectAll}
                       style={{ width: 16, height: 16 }}
                     />
@@ -175,9 +175,11 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map(order =>
-                  order.items.map((item, idx) => (
-                    <tr key={`${order.id}-${idx}`}>
+                {(orders || []).map(order => {
+                  const items = (order as any).orderItems || order.items || [];
+                  return (items || []).map((item: any, idx: number) => {
+                    return (
+                      <tr key={`${order?.id || Math.random()}-${idx}`}>
                       <td>
                         {idx === 0 && (
                           <input
@@ -188,7 +190,7 @@ export default function OrdersPage() {
                           />
                         )}
                       </td>
-                      <td className="text-xs" style={{ fontFamily: 'monospace' }}>
+                      <td className="text-xs" style={{ fontFamily: 'monospace, sans-serif' }}>
                         {idx === 0 ? order.id.substring(0, 8) + '...' : ''}
                       </td>
                       <td className="text-sm">
@@ -202,8 +204,8 @@ export default function OrdersPage() {
                           </>
                         )}
                       </td>
-                      <td>{item.product.title} × {item.quantity}</td>
-                      <td className="text-xs">{CATEGORY_LABELS[item.product.category] || item.product.category}</td>
+                      <td>{item?.product?.title || 'Unknown'} × {item?.quantity || 0}</td>
+                      <td className="text-xs">{CATEGORY_LABELS[item?.product?.category || ''] || item?.product?.category || '—'}</td>
                       <td className="text-xs text-muted">
                         {[item.medium, item.frameType, item.frameColor].filter(Boolean).join(', ') || '—'}
                       </td>
@@ -218,12 +220,13 @@ export default function OrdersPage() {
                         )}
                       </td>
                       <td>{idx === 0 ? `₹${order.totalAmount.toLocaleString()}` : ''}</td>
-                      <td className="text-xs" style={{ fontFamily: 'monospace' }}>
+                      <td className="text-xs" style={{ fontFamily: 'monospace, sans-serif' }}>
                         {idx === 0 ? (order.transactionId || '—') : ''}
                       </td>
                     </tr>
-                  ))
-                )}
+                  );
+                });
+              })}
               </tbody>
             </table>
           </div>

@@ -23,12 +23,19 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     },
   });
 
-  if (!category) {
-    notFound();
+  if (!category || !category.subCategories) {
+    return (
+      <div className="page-content">
+        <div className="container empty-state">
+          <h2>Category Not Found</h2>
+          <p>We couldn&apos;t find the collection you were looking for.</p>
+        </div>
+      </div>
+    );
   }
-
+  
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalProducts = category.subCategories.reduce((sum: number, s: any) => sum + s.products.length, 0);
+  const totalProducts = (category.subCategories || []).reduce((sum: number, s: any) => sum + (s?.products?.length || 0), 0);
 
   return (
     <div className="page-content fade-in">
@@ -44,7 +51,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
             <p>New pieces are being added to this collection. Check back soon.</p>
           </div>
         ) : (
-          category.subCategories.map((sub: any) => (
+          (category?.subCategories || []).map((sub: any) => (
             sub.products.length === 0 ? null : (
               <div key={sub.id} style={{ marginBottom: 'var(--space-3xl)' }}>
                 <div style={{ marginBottom: 'var(--space-xl)', paddingBottom: 'var(--space-sm)', borderBottom: '1px solid var(--color-border-light)', display: 'flex', alignItems: 'baseline', gap: 'var(--space-md)' }}>
@@ -52,7 +59,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
                   <span className="text-xs text-muted">{sub.products.length} piece{sub.products.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="product-grid">
-                  {sub.products.slice(0, 3).map((product: any) => (
+                  {(sub?.products || []).slice(0, 3).map((product: any) => (
                     <ProductCard
                       key={product.id}
                       id={product.id}

@@ -222,9 +222,9 @@ function AddProductContent() {
       image: images[0] || '/images/placeholder.jpg',
       images: JSON.stringify(images),
       subCategoryId,
-      specifications: cleanedSpecs,
+      specifications: JSON.stringify(cleanedSpecs),
       basePrice: parseFloat(basePrice),
-      priceModifiers: finalPrices,
+      priceModifiers: JSON.stringify(finalPrices),
       unitsAvailable: hasUnits ? (parseInt(unitsAvailable) || 0) : null,
       requestId: requestId || undefined,
     };

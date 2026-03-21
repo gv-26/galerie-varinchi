@@ -8,16 +8,17 @@ interface ArtRequest {
   id: string;
   title: string;
   description: string;
-  price: number;
-  quantity: number;
+  price: number | string | null;
+  quantity: number | string | null;
   yearCreated: string;
   specifications: string; // JSON Array
   images: string; // JSON Array
   additionalInfo: string | null;
   createdAt: string;
-  artist: { fullName: string };
-  category: { name: string };
-  subCategory: { name: string };
+  artistProfile?: { fullName: string } | null;
+  artist?: { fullName: string } | null;
+  category?: { name: string } | null;
+  subCategory?: { name: string } | null;
 }
 
 export default function AdminArtworkReviewDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -81,7 +82,7 @@ export default function AdminArtworkReviewDetail({ params }: { params: Promise<{
 
         <h1 className="heading-serif" style={{ marginBottom: 'var(--space-md)' }}>Review Artwork Submission</h1>
         <p className="text-muted" style={{ marginBottom: 'var(--space-xl)' }}>
-          Submitted by <strong>{request.artist.fullName}</strong> on {new Date(request.createdAt).toLocaleDateString()}
+          Submitted by <strong>{request.artistProfile?.fullName || request.artist?.fullName || 'Unknown Artist'}</strong> on {request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '—'}
         </p>
 
         <div className="profile-card">
@@ -99,11 +100,11 @@ export default function AdminArtworkReviewDetail({ params }: { params: Promise<{
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
             <div>
               <label className="text-xs text-muted">Category</label>
-              <p>{request.category.name}</p>
+              <p>{request.category?.name || '—'}</p>
             </div>
             <div>
               <label className="text-xs text-muted">Sub-Category</label>
-              <p>{request.subCategory.name}</p>
+              <p>{request.subCategory?.name || '—'}</p>
             </div>
           </div>
 
@@ -115,7 +116,7 @@ export default function AdminArtworkReviewDetail({ params }: { params: Promise<{
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
             <div>
               <label className="text-xs text-muted">Suggested Pricing</label>
-              <p style={{ fontWeight: 'bold' }}>${request.price.toFixed(2)}</p>
+              <p style={{ fontWeight: 'bold' }}>₹{Number(request.price || 0).toLocaleString()}</p>
             </div>
             <div>
               <label className="text-xs text-muted">Quantity</label>

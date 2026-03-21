@@ -6,8 +6,9 @@ import Link from 'next/link';
 interface ArtRequest {
   id: string;
   title: string;
-  artist: { fullName: string };
-  price: number;
+  artistProfile?: { fullName: string } | null;
+  artist?: { fullName: string } | null;
+  price: number | string | null;
   createdAt: string;
 }
 
@@ -62,9 +63,9 @@ export default function AdminArtworkRequests() {
                 {requests.map(req => (
                   <tr key={req.id}>
                     <td><strong>{req.title}</strong></td>
-                    <td>{req.artist.fullName}</td>
-                    <td>${req.price.toFixed(2)}</td>
-                    <td>{new Date(req.createdAt).toLocaleDateString()}</td>
+                    <td>{req.artistProfile?.fullName || req.artist?.fullName || 'Unknown Artist'}</td>
+                    <td>₹{Number(req.price || 0).toLocaleString()}</td>
+                    <td>{req.createdAt ? new Date(req.createdAt).toLocaleDateString('en-IN') : '—'}</td>
                     <td>
                       <Link href={`/admin/artwork-requests/${req.id}`} className="btn btn-secondary btn-sm">
                         Review & Publish

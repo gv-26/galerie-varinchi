@@ -10,23 +10,13 @@ import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
 
-function getAwsCredentials() {
-  return {
-    accessKeyId: process.env.MY_AWS_ACCESS_KEY_ID || getSecret('AWS_ACCESS_KEY_ID') || '',
-    secretAccessKey: process.env.MY_AWS_SECRET_ACCESS_KEY || getSecret('AWS_SECRET_ACCESS_KEY') || '',
-  };
-}
 
 let s3Client: any = null;
 async function getS3Client() {
   if (!s3Client) {
-    const creds = getAwsCredentials();
     s3Client = new S3Client({
       region: getSecret('AWS_REGION') || 'ap-south-1',
-      credentials: {
-        accessKeyId: creds.accessKeyId,
-        secretAccessKey: creds.secretAccessKey,
-      },
+      // No explicit credentials; use Lambda's IAM role
     });
   }
   return s3Client;
@@ -96,17 +86,10 @@ async function uploadToS3(file: File): Promise<string> {
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const key = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+  const key = `assets/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
 
   try {
-    const accessKey = getSecret('AWS_ACCESS_KEY_ID');
-    const secretKey = getSecret('AWS_SECRET_ACCESS_KEY');
-    const sessionToken = getSecret('AWS_SESSION_TOKEN');
-
-    console.log("AWS DEBUG:", {
-      accessKeyStart: accessKey?.slice(0, 6),
-      accessKeyType: accessKey?.startsWith("AKIA") ? "IAM_USER" : "TEMP/ROLE",
-    });
+    console.log("AWS UPLOAD: Starting upload to bucket", bucketName);
 
     const s3 = await getS3Client();
     await s3.send(new PutObjectCommand({
@@ -115,11 +98,11 @@ async function uploadToS3(file: File): Promise<string> {
       Body: buffer,
       ContentType: file.type,
     }));
-    const cdnUrl = getSecret('CLOUDFRONT_URL');
-    if (cdnUrl) {
-      return `${cdnUrl}/${key}`;
-    }
-    return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
+    // Use the environment variable we set in sst.config.ts
+    const cdnUrl = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || "https://www.galerievarinchi.com";
+    
+    // Ensure there is only one slash between the domain and the key
+    return `${cdnUrl.replace(/\/$/, '')}/${key}`;
   } catch (error) {
     console.error('S3 Upload Error:', error);
     throw new Error('Failed to upload file to S3');
@@ -268,10 +251,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       if (action[1] === 'artwork-requests') {
         const reqId = action[2];
         if (reqId) {
-          const req = await db.query.artRequest.findFirst({ where: eq(schema.artRequest.id, reqId), with: { artistProfile: true } });
+          const req = await db.query.artRequest.findFirst({ 
+            where: eq(schema.artRequest.id, reqId), 
+            with: { artistProfile: true, category: true, subCategory: true } 
+          });
           return req ? NextResponse.json({ request: req }) : NextResponse.json({ error: 'Not found' }, { status: 404 });
         }
-        const list = await db.query.artRequest.findMany({ with: { artistProfile: true } });
+        const list = await db.query.artRequest.findMany({ 
+          with: { artistProfile: true, category: true, subCategory: true } 
+        });
         return NextResponse.json({ requests: list });
       }
     }
@@ -291,11 +279,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       try {
         await db.select({ count: sql`count(*)` }).from(schema.user).limit(1);
         
-        // Test S3 SDK loadability
         let s3Status = 'not_tested';
         try {
           await getS3Client();
-          s3Status = 'loadable';
+          s3Status = 'initialized';
         } catch (s3Err: any) {
           s3Status = `error: ${s3Err.message}`;
         }
@@ -304,10 +291,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           status: 'ok', 
           db: 'connected', 
           s3: s3Status,
-          aws: {
-            accessKeyPrefix: (getSecret('AWS_ACCESS_KEY_ID') || '').substring(0, 4),
-            accessKeyLength: (getSecret('AWS_ACCESS_KEY_ID') || '').length,
-          },
           time: new Date().toISOString() 
         });
       } catch (e: any) {
@@ -389,6 +372,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           description,
           yearCreated,
           price,
+          quantity: parseInt(formData.get('quantity') as string) || 1,
+          specifications: formData.get('specifications') as string || '[]',
           images: JSON.stringify(urls),
           status: 'PENDING',
           categoryId: formData.get('categoryId') as string,
@@ -417,22 +402,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const otp = body.otp?.trim();
       
       if (action[1] === 'signin' || action[1] === 'signup' || action[1] === 'otp' || action[1] === 'verify-otp') {
-         if (!otp) {
-           console.log('[Auth] Generating OTP for:', email);
-           const code = Math.floor(100000 + Math.random() * 900000).toString();
-           const newExpiresAt = new Date(Date.now() + 600000).toISOString();
-           try {
-             await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
-               .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
-             console.log('[Auth] OTP stored in DB');
-             await sendOtpEmail(email, code);
-             console.log('[Auth] OTP email sent');
-             return NextResponse.json({ message: 'Sent' });
-           } catch (dbErr: any) {
-             console.error('[Auth] DB/Email Error:', dbErr);
-             throw dbErr;
-           }
-         }
+          if (!otp) {
+            // Check existence for sign-in
+            if (action[1] === 'signin' || action[1] === 'otp') {
+              const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
+              if (!u) {
+                return NextResponse.json({ error: 'Account not found. Please sign up instead.' }, { status: 404 });
+              }
+            }
+            
+            // Check if user already exists for sign-up
+            if (action[1] === 'signup') {
+              const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
+              if (u) {
+                return NextResponse.json({ error: 'Account already exists. Please sign in instead.' }, { status: 400 });
+              }
+            }
+
+            console.log('[Auth] Generating OTP for:', email);
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const newExpiresAt = new Date(Date.now() + 600000).toISOString();
+            try {
+              await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
+                .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
+              console.log('[Auth] OTP stored in DB');
+              await sendOtpEmail(email, code);
+              console.log('[Auth] OTP email sent');
+              return NextResponse.json({ message: 'Sent' });
+            } catch (dbErr: any) {
+              console.error('[Auth] DB/Email Error:', dbErr);
+              throw dbErr;
+            }
+          }
         
         const record = await db.query.otpToken.findFirst({ 
           where: eq(schema.otpToken.email, email), 
@@ -548,6 +549,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
              basePrice: artReq.price,
              image: imageUrls[0] || '/images/placeholder.jpg',
              images: artReq.images,
+             specifications: artReq.specifications,
+             unitsAvailable: artReq.quantity,
              status: 'active',
              subCategoryId: artReq.subCategoryId,
            });
@@ -573,11 +576,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (action[0] === 'categories' && user?.isAdmin) {
+      const existing = await db.query.category.findFirst({ where: eq(schema.category.slug, body.slug) });
+      if (existing) {
+        return NextResponse.json({ error: `Category with slug "${body.slug}" already exists.` }, { status: 400 });
+      }
       const [cat] = await db.insert(schema.category).values({ id: crypto.randomUUID(), ...body }).returning();
       return NextResponse.json(cat);
     }
 
     if (action[0] === 'subcategories' && user?.isAdmin) {
+      const existing = await db.query.subCategory.findFirst({ 
+        where: and(eq(schema.subCategory.slug, body.slug), eq(schema.subCategory.categoryId, body.categoryId)) 
+      });
+      if (existing) {
+        return NextResponse.json({ error: `Sub-category slug "${body.slug}" exists in this category.` }, { status: 400 });
+      }
       const [sub] = await db.insert(schema.subCategory).values({ id: crypto.randomUUID(), ...body }).returning();
       return NextResponse.json(sub);
     }
