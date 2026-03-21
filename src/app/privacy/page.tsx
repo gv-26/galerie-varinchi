@@ -34,13 +34,13 @@ export default function PrivacyPage() {
       <p>
         You have the right to access, correct, or delete your personal information. You may also
         withdraw your consent to receive marketing communications at any time. To exercise these
-        rights, please contact us at hello@galerievarinchie.com.
+        rights, please contact us at hello@galerievarinchi.com.
       </p>
 
       <h2>Contact Us</h2>
       <p>
         If you have any questions about this Privacy Policy, please contact us at
-        hello@galerievarinchie.com or through our contact page.
+        hello@galerievarinchi.com or through our contact page.
       </p>
     </div>
   );

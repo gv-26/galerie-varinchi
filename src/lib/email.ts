@@ -23,7 +23,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
     },
     signal: controller.signal,
     body: JSON.stringify({
-      from: 'Galerie Varinchie <noreply@galerievarinchi.com>',
+      from: 'Galerie Varinchi <noreply@galerievarinchi.com>',
       to,
       subject,
       html,
@@ -51,7 +51,7 @@ export async function sendOtpEmail(email: string, otp: string): Promise<void> {
 
   await sendEmail(
     email,
-    'Your verification code - Galerie Varinchie',
+    'Your verification code - Galerie Varinchi',
     `
       <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 400px; margin: 0 auto; padding: 40px 20px; text-align: center;">
         <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a;">GALERIE VARINCHIE</h2>

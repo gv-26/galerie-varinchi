@@ -5,7 +5,7 @@ export default function TermsPage() {
 
       <h2>1. Acceptance of Terms</h2>
       <p>
-        By accessing and using the Galerie Varinchie website, you accept and agree to be bound by
+        By accessing and using the Galerie Varinchi website, you accept and agree to be bound by
         these Terms of Service. If you do not agree to these terms, please do not use our website.
       </p>
 
@@ -40,13 +40,13 @@ export default function TermsPage() {
       <h2>6. Intellectual Property</h2>
       <p>
         All content on this website, including images, text, logos, and artwork representations,
-        is the property of Galerie Varinchie or its artists and is protected by copyright laws.
+        is the property of Galerie Varinchi or its artists and is protected by copyright laws.
         Unauthorized reproduction or distribution is prohibited.
       </p>
 
       <h2>7. Limitation of Liability</h2>
       <p>
-        Galerie Varinchie shall not be liable for any indirect, incidental, special, or consequential
+        Galerie Varinchi shall not be liable for any indirect, incidental, special, or consequential
         damages arising from your use of our website or purchase of our products.
       </p>
 

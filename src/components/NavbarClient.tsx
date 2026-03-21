@@ -50,7 +50,7 @@ export default function Navbar({ categories }: { categories: Category[] }) {
       <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '100%', padding: '0 max(24px, 4vw)' }}>
         <div style={{ flex: '1', display: 'flex', justifyContent: 'flex-start' }}>
           <Link href="/" className="nav-brand" style={{ fontSize: '12px', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
-            Galerie Varinchie
+            Galerie Varinchi
           </Link>
         </div>
 

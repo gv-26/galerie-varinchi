@@ -23,7 +23,7 @@ export default function Navbar() {
     <nav className="navbar">
       <div className="container">
         <Link href="/" className="nav-brand">
-          Galerie Varinchie
+          Galerie Varinchi
         </Link>
 
         <button className="nav-toggle" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">

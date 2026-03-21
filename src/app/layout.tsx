@@ -7,7 +7,7 @@ import NavbarWrapper from "@/components/NavbarWrapper";
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
-  title: "Galerie Varinchie — Curated Art Collection",
+  title: "Galerie Varinchi — Curated Art Collection",
   description: "Discover curated art prints, mixed media, photographs, and handmade art pieces. Each work is carefully selected to bring beauty and meaning to your space.",
 };
 

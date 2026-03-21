@@ -133,7 +133,7 @@ export default function ArtistSignUpPage() {
           Sign up as an Artist
         </h1>
         <p className="text-center text-muted" style={{ marginBottom: 'var(--space-2xl)' }}>
-          Onboard into Galerie Varinchie to list and showcase your creations
+          Onboard into Galerie Varinchi to list and showcase your creations
         </p>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-md)' }}>{error}</div>}

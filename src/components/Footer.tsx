@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="container">
         <div className="footer-grid">
           <div>
-            <div className="footer-brand">Galerie Varinchie</div>
+            <div className="footer-brand">Galerie Varinchi</div>
             <p className="footer-description">
               Curated art for the discerning collector. Each piece is carefully selected to bring beauty and meaning to your space.
             </p>
@@ -42,7 +42,7 @@ export default function Footer() {
         </div>
 
         <div className="footer-bottom">
-          <span>&copy; {new Date().getFullYear()} Galerie Varinchie. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} Galerie Varinchi. All rights reserved.</span>
           <div className="footer-socials">
             <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">

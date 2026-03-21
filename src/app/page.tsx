@@ -62,7 +62,7 @@ export default function Home() {
             <span className={styles.overline}>Our Philosophy</span>
             <h2 className={styles.sectionTitle}>Every piece tells a story.</h2>
             <p className={styles.paragraph}>
-              Galerie Varinchie is a curated space where emerging and established
+              Galerie Varinchi is a curated space where emerging and established
               artists share their vision with collectors who appreciate the
               extraordinary. We believe art should be accessible, personal, and
               transformative.

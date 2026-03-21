@@ -87,7 +87,7 @@ export default function ContactPage() {
             <div className="profile-card">
               <h3>Visit Us</h3>
               <p className="text-sm text-secondary" style={{ lineHeight: 1.8 }}>
-                Galerie Varinchie<br />
+                Galerie Varinchi<br />
                 123 Art District, Gallery Lane<br />
                 Mumbai, Maharashtra 400001<br />
                 India

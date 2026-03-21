@@ -10,7 +10,7 @@ export default function ReturnPolicyPage() {
         
         <div style={{ lineHeight: 1.8, fontSize: '16px', color: 'var(--color-text)' }}>
           <p style={{ marginBottom: 'var(--space-md)' }}>
-            At Galerie Varinchie, we take pride in the quality of our artwork. Hand-crafted pieces, personalized frames, and individually sourced items mean that each order is unique. Therefore, please carefully read our Return Policy below before making your purchase.
+            At Galerie Varinchi, we take pride in the quality of our artwork. Hand-crafted pieces, personalized frames, and individually sourced items mean that each order is unique. Therefore, please carefully read our Return Policy below before making your purchase.
           </p>
 
           <h2 style={{ fontSize: '24px', margin: 'var(--space-xl) 0 var(--space-md)' }}>1. General Returns</h2>

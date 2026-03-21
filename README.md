@@ -1,6 +1,6 @@
-# Galerie Varinchie - Artist Platform
+# Galerie Varinchi - Artist Platform
 
-Welcome to the Galerie Varinchie platform. This curated statement-art gallery is designed for high-availability, secure asset management, and seamless administrative control.
+Welcome to the Galerie Varinchi platform. This curated statement-art gallery is designed for high-availability, secure asset management, and seamless administrative control.
 
 ---
 
