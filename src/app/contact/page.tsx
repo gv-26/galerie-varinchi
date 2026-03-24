@@ -96,10 +96,10 @@ export default function ContactPage() {
             <div className="profile-card">
               <h3>Contact Info</h3>
               <p className="text-sm">
-                <a href="tel:+919876543210" style={{ color: 'var(--color-accent)' }}>+91 98765 43210</a>
+                <a href="tel:+917259644702" style={{ color: 'var(--color-accent)' }}>+91 72596 44702</a>
               </p>
               <p className="text-sm">
-                <a href="mailto:hello@galerievarinchie.com" style={{ color: 'var(--color-accent)' }}>hello@galerievarinchie.com</a>
+                <a href="mailto:galerievarinchi@gmail.com" style={{ color: 'var(--color-accent)' }}>galerievarinchi@gmail.com</a>
               </p>
             </div>
             <div className="profile-card">

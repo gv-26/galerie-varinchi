@@ -172,6 +172,17 @@ function AddProductContent() {
     }));
   };
 
+  const moveOption = (specId: string, optIndex: number, direction: 'up' | 'down') => {
+    setSpecs(specs.map(s => {
+      if (s.id !== specId) return s;
+      const newOpts = [...s.options];
+      const target = direction === 'up' ? optIndex - 1 : optIndex + 1;
+      if (target < 0 || target >= newOpts.length) return s;
+      [newOpts[optIndex], newOpts[target]] = [newOpts[target], newOpts[optIndex]];
+      return { ...s, options: newOpts };
+    }));
+  };
+
   // Generate Combinations based on specs that have a name and valid options
   const validSpecs = specs.filter(s => s.name.trim() !== '' && s.options.filter(o => o.value.trim() !== '').length > 0);
   
@@ -359,7 +370,11 @@ function AddProductContent() {
                       <div style={{ paddingLeft: 'var(--space-md)' }}>
                         <label className="text-xs text-muted">Options</label>
                         {spec.options.map((opt, oIdx) => (
-                          <div key={oIdx} style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-xs)' }}>
+                          <div key={oIdx} style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-xs)', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              <button type="button" disabled={oIdx === 0} onClick={() => moveOption(spec.id, oIdx, 'up')} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '3px', cursor: oIdx === 0 ? 'default' : 'pointer', padding: '0px 4px', fontSize: '8px', opacity: oIdx === 0 ? 0.3 : 1, lineHeight: '14px' }}>▲</button>
+                              <button type="button" disabled={oIdx === spec.options.length - 1} onClick={() => moveOption(spec.id, oIdx, 'down')} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '3px', cursor: oIdx === spec.options.length - 1 ? 'default' : 'pointer', padding: '0px 4px', fontSize: '8px', opacity: oIdx === spec.options.length - 1 ? 0.3 : 1, lineHeight: '14px' }}>▼</button>
+                            </div>
                             <input 
                               type="text" 
                               value={opt.value} 

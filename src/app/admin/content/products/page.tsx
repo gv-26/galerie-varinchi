@@ -123,7 +123,9 @@ export default function AdminProductsPage() {
                             }}
                           />
                           <span style={{ fontWeight: 500 }}>{product.title}</span>
-                          <span className="text-sm text-muted">₹{product.basePrice.toLocaleString()}</span>
+                          <span className="text-xs" style={{ background: 'var(--color-bg-light)', padding: '2px 8px', borderRadius: '12px', color: 'var(--color-text-secondary)' }}>{catName}</span>
+                          <span className="text-xs" style={{ background: 'var(--color-bg-light)', padding: '2px 8px', borderRadius: '12px', color: 'var(--color-text-secondary)' }}>{subName}</span>
+                          <span className="text-sm text-muted">₹{product.basePrice?.toLocaleString()}</span>
                         </div>
 
                         <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center' }}>
@@ -147,6 +149,13 @@ export default function AdminProductsPage() {
                               Inactive
                             </button>
                           )}
+                          <Link
+                            href={`/admin/edit-product/${product.id}`}
+                            className="btn btn-sm"
+                            style={{ background: 'var(--color-bg-light)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+                          >
+                            Edit
+                          </Link>
                           <button
                             className="btn btn-sm"
                             style={{ background: '#ffebee', color: '#b71c1c', border: 'none' }}

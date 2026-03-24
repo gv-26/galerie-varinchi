@@ -8,7 +8,7 @@
     "db:push": "npx drizzle-kit push",
     "db:studio": "npx drizzle-kit studio",
     "deploy": "sst deploy --stage production",
-    "dev": "sst dev",
+    "dev": "next dev -H 0.0.0.0",
     "lint": "eslint",
     "start": "next start"
   },

@@ -22,7 +22,7 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="container">
-        <Link href="/" className="nav-brand">
+        <Link href="/" className="nav-brand" style={{ fontFamily: '"GFS Didot", "Didot", serif', textTransform: 'none', fontSize: '20px', letterSpacing: '0.04em' }}>
           Galerie Varinchi
         </Link>
 

@@ -54,7 +54,7 @@ export async function sendOtpEmail(email: string, otp: string): Promise<void> {
     'Your verification code - Galerie Varinchi',
     `
       <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 400px; margin: 0 auto; padding: 40px 20px; text-align: center;">
-        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a;">GALERIE VARINCHIE</h2>
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a;">GALERIE VARINCHI</h2>
         <p style="color: #666; font-size: 14px;">Your verification code is:</p>
         <p style="font-size: 32px; font-weight: 600; letter-spacing: 8px; color: #1a1a1a; margin: 24px 0;">${otp}</p>
         <p style="color: #999; font-size: 12px;">This code expires in 10 minutes.</p>
@@ -83,13 +83,67 @@ export async function sendOrderConfirmationEmail(
     `Order Confirmed - ${orderId}`,
     `
       <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHIE</h2>
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
         <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
         <p style="color: #333;">Thank you for your order!</p>
         <p style="color: #666; font-size: 14px;">Order ID: <strong>${orderId}</strong></p>
         <p style="color: #666; font-size: 14px;">Total Amount: <strong>₹${totalAmount.toLocaleString()}</strong></p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
         <p style="color: #999; font-size: 12px; text-align: center;">We'll notify you when your order ships.</p>
+      </div>
+    `
+  );
+}
+
+const ADMIN_EMAIL = 'galerievarinchi@gmail.com';
+
+export async function sendArtistApplicationEmail(artistName: string, artistEmail: string): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [ADMIN NOTIFY] New artist application from ${artistName} (${artistEmail})`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    ADMIN_EMAIL,
+    `New Artist Application — ${artistName}`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">A new artist has applied to join the platform.</p>
+        <p style="color: #666; font-size: 14px;">Name: <strong>${artistName}</strong></p>
+        <p style="color: #666; font-size: 14px;">Email: <strong>${artistEmail}</strong></p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">Review this application in the Admin Dashboard.</p>
+      </div>
+    `
+  );
+}
+
+export async function sendArtworkSubmissionEmail(artistName: string, artworkTitle: string): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [ADMIN NOTIFY] New artwork submission "${artworkTitle}" by ${artistName}`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    ADMIN_EMAIL,
+    `New Artwork Submission — ${artworkTitle}`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">A new artwork has been submitted for review.</p>
+        <p style="color: #666; font-size: 14px;">Artwork: <strong>${artworkTitle}</strong></p>
+        <p style="color: #666; font-size: 14px;">Artist: <strong>${artistName}</strong></p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">Review this submission in the Admin Dashboard.</p>
       </div>
     `
   );

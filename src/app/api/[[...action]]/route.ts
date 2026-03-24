@@ -6,7 +6,7 @@ import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { createToken, getCurrentUser } from '@/lib/auth';
-import { sendOtpEmail, sendOrderConfirmationEmail } from '@/lib/email';
+import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
@@ -350,6 +350,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           updatedAt: new Date().toISOString()
         }).returning();
         
+        // Notify admin
+        sendArtistApplicationEmail(fullName, email).catch(err => console.error('Admin email error:', err));
+        
         return NextResponse.json({ profile });
       }
       
@@ -380,6 +383,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           categoryId: formData.get('categoryId') as string,
           subCategoryId: formData.get('subCategoryId') as string,
         }).returning();
+        
+        // Notify admin
+        sendArtworkSubmissionEmail(profile.fullName, title).catch(err => console.error('Admin email error:', err));
         
         return NextResponse.json({ artReq });
       }

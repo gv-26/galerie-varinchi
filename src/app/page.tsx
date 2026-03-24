@@ -5,22 +5,22 @@ import TestimonialsClient from '@/components/TestimonialsClient';
 export default function Home() {
   const showcaseItems = [
     {
-      image: "/images/lifestyle-1.jpg",
+      image: "/images/home-page-1.jpg",
       alt: "Minimalist interior with framed art print on wall",
       label: "Art Prints",
       slug: "art-prints",
       description: "Museum-quality prints on fine art paper and canvas.",
     },
     {
-      image: "/images/lifestyle-2.jpg",
+      image: "/images/home-page-2.jpg",
       alt: "Framed black and white photograph in gallery lighting",
       label: "Photography",
       slug: "photograph-print",
       description: "Limited-edition photographic prints by contemporary artists.",
     },
     {
-      image: "/images/lifestyle-3.jpg",
-      alt: "Close-up of mixed media artwork with gold leaf and ink",
+      image: "/images/hero_image.jpg",
+      alt: "Contemporary art gallery interior with abstract painting",
       label: "Mixed Media",
       slug: "mixed-media",
       description: "Textured, layered works that blur the line between craft and fine art.",
@@ -33,8 +33,8 @@ export default function Home() {
       <section className={styles.hero}>
         <div className={styles.heroImageContainer}>
           <img
-            src="/images/mustafa-bepari.jpg"
-            alt="Contemporary art gallery interior with abstract painting"
+            src="/images/home-page-3.jpg"
+            alt="Close-up of mixed media artwork with gold leaf and ink"
             className={styles.heroImage}
           />
           <div className={styles.heroOverlay} />

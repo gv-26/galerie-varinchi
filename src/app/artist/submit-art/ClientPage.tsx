@@ -110,6 +110,17 @@ export default function SubmitArtPage() {
     }));
   };
 
+  const moveOption = (specId: string, optIndex: number, direction: 'up' | 'down') => {
+    setSpecs(specs.map(s => {
+      if (s.id !== specId) return s;
+      const newOpts = [...s.options];
+      const target = direction === 'up' ? optIndex - 1 : optIndex + 1;
+      if (target < 0 || target >= newOpts.length) return s;
+      [newOpts[optIndex], newOpts[target]] = [newOpts[target], newOpts[optIndex]];
+      return { ...s, options: newOpts };
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!images || images.length === 0) {
@@ -240,7 +251,11 @@ export default function SubmitArtPage() {
                 
                 <div style={{ paddingLeft: 'var(--space-md)' }}>
                   {spec.options.map((opt, oIndex) => (
-                    <div key={oIndex} style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-xs)', alignItems: 'center' }}>
+                  <div key={oIndex} style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-xs)', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                        <button type="button" disabled={oIndex === 0} onClick={() => moveOption(spec.id, oIndex, 'up')} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '3px', cursor: oIndex === 0 ? 'default' : 'pointer', padding: '0px 4px', fontSize: '8px', opacity: oIndex === 0 ? 0.3 : 1, lineHeight: '14px' }}>▲</button>
+                        <button type="button" disabled={oIndex === spec.options.length - 1} onClick={() => moveOption(spec.id, oIndex, 'down')} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '3px', cursor: oIndex === spec.options.length - 1 ? 'default' : 'pointer', padding: '0px 4px', fontSize: '8px', opacity: oIndex === spec.options.length - 1 ? 0.3 : 1, lineHeight: '14px' }}>▼</button>
+                      </div>
                       <input 
                         type="text" 
                         value={opt.value} 
@@ -268,7 +283,7 @@ export default function SubmitArtPage() {
           </div>
 
           <button className="btn btn-primary btn-full" type="submit" disabled={loading} style={{ marginTop: 'var(--space-md)' }}>
-            {loading ? <span className="spinner"></span> : 'Submit Request to Admin'}
+            {loading ? <span className="spinner"></span> : 'Submit Artwork'}
           </button>
         </form>
       </div>

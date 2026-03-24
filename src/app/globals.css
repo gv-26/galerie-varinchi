@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@300;400;500;600&family=GFS+Didot&display=swap');
 
 :root {
   /* Colors - Warm minimalist palette */
@@ -168,6 +168,8 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  max-width: 100%;
+  padding: 0 max(24px, 3vw);
 }
 
 .nav-brand {
@@ -1049,6 +1051,11 @@ tbody tr:hover {
    Responsive
    ============================== */
 
+/* Prevent horizontal scroll globally */
+html, body {
+  overflow-x: hidden;
+}
+
 @media (max-width: 900px) {
   .nav-categories {
     display: none;
@@ -1069,6 +1076,7 @@ tbody tr:hover {
     padding: var(--space-lg);
     border-bottom: 1px solid var(--color-border);
     gap: var(--space-md);
+    z-index: 99;
   }
 
   .product-detail {
@@ -1090,6 +1098,23 @@ tbody tr:hover {
 }
 
 @media (max-width: 600px) {
+  .nav-admin-link {
+    display: none;
+  }
+
+  .nav-actions {
+    gap: var(--space-xs);
+  }
+
+  .nav-icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .container {
+    padding: 0 var(--space-md);
+  }
+
   .product-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: var(--space-md);
@@ -1106,6 +1131,10 @@ tbody tr:hover {
   .cart-item-image {
     width: 100%;
     aspect-ratio: 16 / 9;
+  }
+
+  .page-content {
+    padding: var(--space-xl) 0;
   }
 }
 
