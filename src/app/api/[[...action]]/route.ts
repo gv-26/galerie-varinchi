@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
@@ -555,6 +556,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
              subCategoryId: artReq.subCategoryId,
            });
         }
+        
+        revalidatePath('/admin/content/products');
+        revalidatePath('/category', 'layout');
+        revalidatePath('/');
+        
         return NextResponse.json({ artReq });
       }
     }
@@ -572,6 +578,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         basePrice: body.price || body.basePrice || 0,
         image: body.image || (getImages(body.images)[0] || '/images/placeholder.jpg')
       }).returning();
+      
+      revalidatePath('/admin/content/products');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json({ product: parseProduct(p) }, { status: 201 });
     }
 
@@ -581,6 +592,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: `Category with slug "${body.slug}" already exists.` }, { status: 400 });
       }
       const [cat] = await db.insert(schema.category).values({ id: crypto.randomUUID(), ...body }).returning();
+      
+      revalidatePath('/admin/content/categories');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json(cat);
     }
 
@@ -592,6 +608,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: `Sub-category slug "${body.slug}" exists in this category.` }, { status: 400 });
       }
       const [sub] = await db.insert(schema.subCategory).values({ id: crypto.randomUUID(), ...body }).returning();
+      
+      revalidatePath('/admin/content/subcategories');
+      revalidatePath('/admin/content/products');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json(sub);
     }
 
@@ -628,16 +650,32 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (action[0] === 'products' && user?.isAdmin) {
       const id = new URL(request.url).searchParams.get('id') || action[1];
       const [p] = await db.update(schema.product).set(body).where(eq(schema.product.id, id)).returning();
+      
+      revalidatePath('/admin/content/products');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json({ product: parseProduct(p) });
     }
     if (action[0] === 'subcategories' && user?.isAdmin) {
       const id = action[1];
       const [sub] = await db.update(schema.subCategory).set(body).where(eq(schema.subCategory.id, id)).returning();
+      
+      revalidatePath('/admin/content/subcategories');
+      revalidatePath('/admin/content/products');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json(sub);
     }
     if (action[0] === 'categories' && user?.isAdmin) {
       const id = action[1];
       const [cat] = await db.update(schema.category).set(body).where(eq(schema.category.id, id)).returning();
+      
+      revalidatePath('/admin/content/categories');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json(cat);
     }
     return NextResponse.json({ error: 'Not Found' }, { status: 404 });
@@ -654,6 +692,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       // Update Product status
       if (action[0] === 'products' && action[1]) {
         const [p] = await db.update(schema.product).set(body).where(eq(schema.product.id, action[1])).returning();
+        
+        revalidatePath('/admin/content/products');
+        revalidatePath('/category', 'layout');
+        revalidatePath('/');
+        
         return NextResponse.json({ product: parseProduct(p) });
       }
       // Update Order status
@@ -689,11 +732,22 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (action[0] === 'categories' && user?.isAdmin) {
       const id = action[1];
       await db.delete(schema.category).where(eq(schema.category.id, id));
+      
+      revalidatePath('/admin/content/categories');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json({ message: 'Removed' });
     }
     if (action[0] === 'subcategories' && user?.isAdmin) {
       const id = action[1];
       await db.delete(schema.subCategory).where(eq(schema.subCategory.id, id));
+      
+      revalidatePath('/admin/content/subcategories');
+      revalidatePath('/admin/content/products');
+      revalidatePath('/category', 'layout');
+      revalidatePath('/');
+      
       return NextResponse.json({ message: 'Removed' });
     }
     return NextResponse.json({ error: 'Not Found' }, { status: 404 });

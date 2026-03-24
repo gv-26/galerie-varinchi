@@ -6,6 +6,34 @@
 
 declare module "sst" {
   export interface Resource {
+    "DATABASE_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "JWT_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "MyWeb": {
+      "type": "sst.aws.Nextjs"
+      "url": string
+    }
+    "MyWebAssets": {
+      "name": string
+      "type": "sst.aws.Bucket"
+    }
+    "MyWebCdn": {
+      "type": "sst.aws.Router"
+      "url": string
+    }
+    "NEXT_PUBLIC_CLOUDFRONT_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "RESEND_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
   }
 }
 /// <reference path="sst-env.d.ts" />

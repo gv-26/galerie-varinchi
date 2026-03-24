@@ -34,7 +34,7 @@ export default function AdminProductsPage() {
   const [updating, setUpdating] = useState<string | null>(null);
 
   const fetchProducts = async () => {
-    const res = await fetch('/api/products?includeInactive=true');
+    const res = await fetch(`/api/products?includeInactive=true&t=${Date.now()}`);
     const data = await res.json();
     // Also fetch deleted products (separate call)
     setProducts(data.products || []);
@@ -63,8 +63,8 @@ export default function AdminProductsPage() {
   // Group products by category → subcategory
   const grouped: GroupedProducts = {};
   for (const p of products) {
-    const catName = p.subCategory.category.name;
-    const subName = p.subCategory.name;
+    const catName = p.subCategory?.category?.name || 'Uncategorized';
+    const subName = p.subCategory?.name || 'No Subcategory';
     if (!grouped[catName]) grouped[catName] = {};
     if (!grouped[catName][subName]) grouped[catName][subName] = [];
     grouped[catName][subName].push(p);
