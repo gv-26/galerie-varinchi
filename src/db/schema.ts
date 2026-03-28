@@ -54,6 +54,7 @@ export const product = pgTable("Product", {
 	basePrice: doublePrecision().notNull(),
 	priceModifiers: text().default('{}').notNull(),
 	unitsAvailable: integer(),
+	totalCommissionPaid: doublePrecision().default(0).notNull(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
 	foreignKey({
@@ -248,6 +249,11 @@ export const artistProfile = pgTable("ArtistProfile", {
 	agreementVersion: text(),
 	agreementTimestamp: timestamp({ precision: 3, mode: 'string' }),
 	status: text().default('PENDING').notNull(),
+	// Bank details (filled by artist after approval)
+	bankName: text(),
+	accountNumber: text(),
+	ifscCode: text(),
+	bankBranch: text(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 	updatedAt: timestamp({ precision: 3, mode: 'string' }).notNull(),
 }, (table) => [
@@ -268,4 +274,43 @@ export const coupon = pgTable("Coupon", {
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
 	uniqueIndex("Coupon_code_key").using("btree", table.code.asc().nullsLast().op("text_ops")),
+]);
+
+export const artistWallet = pgTable("ArtistWallet", {
+	id: text().primaryKey().notNull(),
+	artistId: text().notNull(),
+	availableBalance: doublePrecision().default(0).notNull(),
+	pendingBalance: doublePrecision().default(0).notNull(),
+	updatedAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+	uniqueIndex("ArtistWallet_artistId_key").using("btree", table.artistId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.artistId],
+			foreignColumns: [artistProfile.id],
+			name: "ArtistWallet_artistId_fkey"
+		}).onUpdate("cascade").onDelete("cascade"),
+]);
+
+export const commissionLedger = pgTable("CommissionLedger", {
+	id: text().primaryKey().notNull(),
+	orderItemId: text().notNull(),
+	artistId: text().notNull(),
+	productId: text().notNull(),
+	salePrice: doublePrecision().notNull(),
+	artistShare: doublePrecision().notNull(),
+	commissionType: text().notNull(), // 'INITIAL_33' | 'ROYALTY_7'
+	status: text().default('PENDING').notNull(), // 'PENDING' | 'COMPLETED' | 'CANCELLED'
+	releaseAt: timestamp({ precision: 3, mode: 'string' }).notNull(),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+	foreignKey({
+			columns: [table.artistId],
+			foreignColumns: [artistProfile.id],
+			name: "CommissionLedger_artistId_fkey"
+		}).onUpdate("cascade").onDelete("cascade"),
+	foreignKey({
+			columns: [table.productId],
+			foreignColumns: [product.id],
+			name: "CommissionLedger_productId_fkey"
+		}).onUpdate("cascade").onDelete("cascade"),
 ]);

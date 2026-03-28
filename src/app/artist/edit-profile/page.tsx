@@ -22,6 +22,14 @@ export default function EditProfilePage() {
   const [bio, setBio] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
   
+  // Bank details
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [bankBranch, setBankBranch] = useState('');
+  const [savingBank, setSavingBank] = useState(false);
+  const [bankSuccess, setBankSuccess] = useState('');
+
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +53,10 @@ export default function EditProfilePage() {
             setBio(p.bio || '');
             setProfilePhotoUrl(p.profilePhoto || '');
             setPhotoPreview(p.profilePhoto || '');
+            setBankName(p.bankName || '');
+            setAccountNumber(p.accountNumber || '');
+            setIfscCode(p.ifscCode || '');
+            setBankBranch(p.bankBranch || '');
           } else {
             setError('Artist profile not found.');
           }
@@ -199,6 +211,63 @@ export default function EditProfilePage() {
             </button>
           </div>
         </form>
+
+        {/* Bank Details Section */}
+        <div className="profile-card" style={{ marginTop: 'var(--space-xl)' }}>
+          <h3 style={{ marginBottom: 'var(--space-lg)' }}>Bank Details for Payouts</h3>
+          <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-lg)' }}>
+            These details are used to process your wallet payouts. They are stored securely and never shared publicly.
+          </p>
+          {bankSuccess && <div className="alert alert-success" style={{ marginBottom: 'var(--space-md)' }}>{bankSuccess}</div>}
+          <div className="form-group">
+            <label>Bank Name</label>
+            <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} placeholder="e.g. HDFC Bank" />
+          </div>
+          <div className="form-group">
+            <label>Account Number</label>
+            <input type="text" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="Your account number" />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
+            <div className="form-group">
+              <label>IFSC Code</label>
+              <input type="text" value={ifscCode} onChange={e => setIfscCode(e.target.value.toUpperCase())} placeholder="e.g. HDFC0001234" />
+            </div>
+            <div className="form-group">
+              <label>Branch</label>
+              <input type="text" value={bankBranch} onChange={e => setBankBranch(e.target.value)} placeholder="Branch name" />
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={savingBank}
+            onClick={async () => {
+              setSavingBank(true);
+              setBankSuccess('');
+              setError('');
+              try {
+                const res = await fetch('/api/artist/wallet/bank', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ bankName, accountNumber, ifscCode, bankBranch })
+                });
+                if (res.ok) {
+                  setBankSuccess('Bank details saved successfully!');
+                  setTimeout(() => setBankSuccess(''), 4000);
+                } else {
+                  const d = await res.json();
+                  setError(d.error || 'Failed to save bank details');
+                }
+              } catch {
+                setError('An error occurred saving bank details');
+              } finally {
+                setSavingBank(false);
+              }
+            }}
+          >
+            {savingBank ? 'Saving...' : 'Save Bank Details'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { category, subCategory, product, user, cartItem, wishlistItem, order, orderItem, artistProfile, artRequest, session, testimonial, coupon } from "./schema";
+import { category, subCategory, product, user, cartItem, wishlistItem, order, orderItem, artistProfile, artRequest, session, testimonial, coupon, artistWallet, commissionLedger } from "./schema";
 
 export const subCategoryRelations = relations(subCategory, ({one, many}) => ({
 	category: one(category, {
@@ -28,6 +28,7 @@ export const productRelations = relations(product, ({one, many}) => ({
 	wishlistItems: many(wishlistItem),
 	orderItems: many(orderItem),
 	testimonials: many(testimonial),
+	commissionLedgers: many(commissionLedger),
 }));
 
 export const cartItemRelations = relations(cartItem, ({one}) => ({
@@ -106,6 +107,11 @@ export const artistProfileRelations = relations(artistProfile, ({one, many}) => 
 		fields: [artistProfile.userId],
 		references: [user.id]
 	}),
+	wallet: one(artistWallet, {
+		fields: [artistProfile.id],
+		references: [artistWallet.artistId]
+	}),
+	commissionLedgers: many(commissionLedger),
 }));
 
 export const sessionRelations = relations(session, ({one}) => ({
@@ -128,4 +134,22 @@ export const testimonialRelations = relations(testimonial, ({one}) => ({
 
 export const couponRelations = relations(coupon, ({many}) => ({
 	orders: many(order),
+}));
+
+export const artistWalletRelations = relations(artistWallet, ({one}) => ({
+	artistProfile: one(artistProfile, {
+		fields: [artistWallet.artistId],
+		references: [artistProfile.id]
+	}),
+}));
+
+export const commissionLedgerRelations = relations(commissionLedger, ({one}) => ({
+	artistProfile: one(artistProfile, {
+		fields: [commissionLedger.artistId],
+		references: [artistProfile.id]
+	}),
+	product: one(product, {
+		fields: [commissionLedger.productId],
+		references: [product.id]
+	}),
 }));
