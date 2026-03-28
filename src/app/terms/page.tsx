@@ -53,7 +53,7 @@ export default function TermsPage() {
       <h2>8. Contact</h2>
       <p>
         For any questions regarding these Terms of Service, please contact us at
-        hello@galerievarinchie.com.
+        galerievarinchi@gmail.com.
       </p>
     </div>
   );

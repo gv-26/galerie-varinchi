@@ -5,11 +5,13 @@ import Link from 'next/link';
 
 interface Artist {
   id: string;
+  userId: string;
   fullName: string;
   email: string;
   phone: string;
   specialization: string;
   country: string;
+  agreementPdfUrl?: string | null;
 }
 
 export default function AdminApprovedArtists() {
@@ -57,6 +59,7 @@ export default function AdminApprovedArtists() {
                   <th>Phone</th>
                   <th>Location</th>
                   <th>Specialization</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -67,6 +70,18 @@ export default function AdminApprovedArtists() {
                     <td>{artist.phone}</td>
                     <td>{artist.country}</td>
                     <td>{artist.specialization}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+                        <Link href={`/artist/${artist.id}`} className="btn btn-secondary btn-sm">
+                          View Profile
+                        </Link>
+                        {artist.agreementPdfUrl && (
+                          <a href={artist.agreementPdfUrl} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+                            📄 Agreement
+                          </a>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

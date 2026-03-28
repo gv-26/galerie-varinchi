@@ -6,7 +6,9 @@ export default function Footer() {
       <div className="container">
         <div className="footer-grid">
           <div>
-            <div className="footer-brand">Galerie Varinchi</div>
+            <Link href="/" className="footer-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+              <img src="/images/gv_logo.png?v=2" alt="Galerie Varinchi" style={{ height: '32px', width: 'auto', filter: 'invert(1)' }} />
+            </Link>
             <p className="footer-description">
               Curated art for the discerning collector. Each piece is carefully selected to bring beauty and meaning to your space.
             </p>
@@ -27,8 +29,8 @@ export default function Footer() {
             <h4>Contact</h4>
             <div className="footer-links">
               <Link href="/contact">Contact Us</Link>
-              <a href="tel:+919876543210">+91 98765 43210</a>
-              <a href="mailto:hello@galerievarinchie.com">hello@galerievarinchie.com</a>
+              <a href="tel:+917259644702">+91 72596 44702</a>
+              <a href="mailto:galerievarinchi@gmail.com">galerievarinchi@gmail.com</a>
             </div>
           </div>
 

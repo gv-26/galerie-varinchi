@@ -24,6 +24,9 @@ export default function ProfilePage() {
   const [ordersLimit, setOrdersLimit] = useState(10);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [isArtist, setIsArtist] = useState(false);
+  const [artistId, setArtistId] = useState('');
 
   const [prevUser, setPrevUser] = useState(user);
 
@@ -44,6 +47,18 @@ export default function ProfilePage() {
           setOrders(data.orders || []);
           setTotalOrders(data.total || 0);
         });
+      // Check artist profile
+      if (!user.isAdmin) {
+        fetch('/api/artist/profile')
+          .then(res => res.json())
+          .then(data => {
+            if (data.profile) {
+              setIsArtist(true);
+              setArtistId(data.profile.id);
+            }
+          })
+          .catch(() => {});
+      }
     }
   }, [user, ordersLimit]);
 
@@ -76,6 +91,7 @@ export default function ProfilePage() {
     if (res.ok) {
       await refreshUser();
       setSaved(true);
+      setEditMode(false);
       setTimeout(() => setSaved(false), 2000);
     }
     setSaving(false);
@@ -101,47 +117,59 @@ export default function ProfilePage() {
             <h1>Your Profile</h1>
             <p className="text-muted">{user.email}</p>
           </div>
-          <div>
+          <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+            {isArtist && (
+              <Link href={`/artist/${artistId}`} className="btn btn-accent btn-sm">View Artist Profile</Link>
+            )}
             <Link href="/profile/add-testimonial" className="btn btn-secondary btn-sm">Add Testimonial</Link>
           </div>
         </div>
 
         <div className="profile-card">
-          <h3>Personal Information</h3>
-          <div className="form-group">
-            <label>Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Your name"
-            />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
+            <h3 style={{ margin: 0 }}>Personal Information</h3>
+            {!editMode && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditMode(true)}>Edit</button>
+            )}
           </div>
-          <div className="form-group">
-            <label>Phone</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="Your phone number"
-            />
-          </div>
-          <div className="form-group">
-            <label>Delivery Address</label>
-            <textarea
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              placeholder="Enter your delivery address"
-              rows={3}
-            />
-          </div>
-          <button
-            className={`btn ${saved ? 'btn-accent' : 'btn-primary'} btn-sm`}
-            onClick={handleSaveProfile}
-            disabled={saving}
-          >
-            {saved ? '✓ Saved' : saving ? 'Saving...' : 'Save Changes'}
-          </button>
+
+          {editMode ? (
+            <>
+              <div className="form-group">
+                <label>Name</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
+              </div>
+              <div className="form-group">
+                <label>Phone</label>
+                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Your phone number" />
+              </div>
+              <div className="form-group">
+                <label>Delivery Address</label>
+                <textarea value={address} onChange={e => setAddress(e.target.value)} placeholder="Enter your delivery address" rows={3} />
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                <button className={`btn ${saved ? 'btn-accent' : 'btn-primary'} btn-sm`} onClick={handleSaveProfile} disabled={saving}>
+                  {saved ? '✓ Saved' : saving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setEditMode(false)}>Cancel</button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
+              <div>
+                <p className="text-xs text-muted" style={{ marginBottom: '2px' }}>Name</p>
+                <p style={{ fontWeight: 500 }}>{user.name || <span className="text-muted">Not set</span>}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted" style={{ marginBottom: '2px' }}>Phone</p>
+                <p style={{ fontWeight: 500 }}>{user.phone || <span className="text-muted">Not set</span>}</p>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <p className="text-xs text-muted" style={{ marginBottom: '2px' }}>Delivery Address</p>
+                <p style={{ fontWeight: 500 }}>{user.address || <span className="text-muted">Not set</span>}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="profile-card">

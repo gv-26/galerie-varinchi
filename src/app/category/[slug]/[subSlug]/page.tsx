@@ -69,6 +69,7 @@ export default async function SubCategoryPage({
                 id={product.id}
                 title={product.title}
                 image={product.image}
+                unitsAvailable={product.unitsAvailable}
               />
             ))}
           </div>

@@ -5,8 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
-import { createToken, getCurrentUser } from '@/lib/auth';
-import { sendOtpEmail, sendOrderConfirmationEmail } from '@/lib/email';
+import { createToken, getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth';
+import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import crypto from 'crypto';
@@ -100,10 +100,10 @@ async function uploadToS3(file: File): Promise<string> {
       ContentType: file.type,
     }));
     // Use the environment variable we set in sst.config.ts
-    const cdnUrl = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || "https://www.galerievarinchi.com";
+    const cdnBase = (process.env.NEXT_PUBLIC_CLOUDFRONT_URL || "https://www.galerievarinchi.com").replace(/\/$/, '').replace(/\/assets$/, '');
     
-    // Ensure there is only one slash between the domain and the key
-    return `${cdnUrl.replace(/\/$/, '')}/${key}`;
+    // Ensure there is only one slash between the base domain and the key (which already starts with assets/)
+    return `${cdnBase}/${key}`;
   } catch (error) {
     console.error('S3 Upload Error:', error);
     throw new Error('Failed to upload file to S3');
@@ -125,13 +125,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       if (pId) {
         const p = await db.query.product.findFirst({ 
           where: eq(schema.product.id, pId), 
-          with: { subCategory: { with: { category: true } } } 
+          with: { subCategory: { with: { category: true } }, artistProfile: true } 
         });
         return p ? NextResponse.json({ product: parseProduct(p) }) : NextResponse.json({ error: 'Not found' }, { status: 404 });
       }
       const list = await db.query.product.findMany({ 
         orderBy: [desc(schema.product.createdAt)], 
-        with: { subCategory: { with: { category: true } } } 
+        with: { subCategory: { with: { category: true } }, artistProfile: true } 
       });
       return NextResponse.json({ products: list.map(parseProduct) });
     }
@@ -171,9 +171,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ items });
     }
 
-    // Public: Testimonials
+    // Public: Testimonials (only active ones)
     if (action[0] === 'testimonials') {
       const list = await db.query.testimonial.findMany({
+        where: eq(schema.testimonial.isActive, true),
         with: { user: { columns: { name: true } }, product: { columns: { title: true } } },
         orderBy: [desc(schema.testimonial.createdAt)]
       });
@@ -263,9 +264,35 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         });
         return NextResponse.json({ requests: list });
       }
+      
+      // Admin: Coupons
+      if (action[1] === 'coupons') {
+        const list = await db.query.coupon.findMany({ orderBy: [desc(schema.coupon.createdAt)] });
+        return NextResponse.json({ coupons: list });
+      }
+      
+      // Admin: All Testimonials (including hidden)
+      if (action[1] === 'testimonials') {
+        const list = await db.query.testimonial.findMany({
+          with: { user: { columns: { name: true } }, product: { columns: { title: true } } },
+          orderBy: [desc(schema.testimonial.createdAt)]
+        });
+        return NextResponse.json(list);
+      }
     }
 
-    // Artist: Dashboard & Profile
+    // Public/Admin: Artist Profile by ID
+    if (action[0] === 'artist' && action[1] && action[1] !== 'profile' && action[1] !== 'art-requests' && action[1] !== 'apply') {
+      const condition = user?.isAdmin 
+        ? eq(schema.artistProfile.id, action[1])
+        : and(eq(schema.artistProfile.id, action[1]), eq(schema.artistProfile.status, 'APPROVED'));
+      const profile = await db.query.artistProfile.findFirst({ where: condition });
+      return profile 
+        ? NextResponse.json({ profile }) 
+        : NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    // Artist: Dashboard & Profile (authenticated)
     if (action[0] === 'artist' && user) {
        const profile = await db.query.artistProfile.findFirst({ where: eq(schema.artistProfile.userId, user.id) });
        if (action[1] === 'profile') return NextResponse.json({ profile });
@@ -312,27 +339,52 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { action = [] } = await params;
     const user = await getCurrentUser();
     
-    // Handle Multipart for Profile Application and Artwork Submission
+    // --- Handle Multipart (Fallback for small legacy uploads, though we now prefer Presigned URLs) ---
     const contentType = request.headers.get('content-type') || '';
-    
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
+      // Generic Upload
+      if (action[0] === 'upload' && user?.isAdmin) {
+        const file = formData.get('file');
+        if (!file || !(file instanceof File)) {
+          return NextResponse.json({ error: 'No valid file provided' }, { status: 400 });
+        }
+        const url = await uploadToS3(file);
+        return NextResponse.json({ url });
+      }
+    }
+
+    // --- JSON Handlers ---
+    const body = await request.json().catch(() => ({}));
+
+    // 1. Generate Presigned URL for Direct S3 Uploads (solves OpenNext multipart crash)
+    if (action[0] === 'upload' && action[1] === 'presigned') {
+      const { filename, contentType } = body;
+      if (!filename || !contentType) return NextResponse.json({ error: 'filename and contentType required' }, { status: 400 });
       
-      // Artist apply
-      if (action[0] === 'artist' && action[1] === 'apply' && user) {
-        const fullName = formData.get('fullName') as string;
-        const email = formData.get('email') as string;
-        const phone = formData.get('phone') as string;
-        const country = formData.get('country') as string;
-        const state = formData.get('state') as string;
-        const area = formData.get('area') as string;
-        const bio = formData.get('bio') as string;
-        const specialization = formData.get('specialization') as string;
-        const portfolioLink = formData.get('portfolioLink') as string;
-        const examples = formData.getAll('examples') as File[];
-        
-        const urls = await Promise.all(examples.map(f => uploadToS3(f)));
-        
+      const s3 = await getS3Client();
+      const bucketName = getSecret('S3_BUCKET_NAME');
+      const key = `assets/${Date.now()}-${filename.replace(/\s+/g, '_')}`;
+      
+      const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+      const command = new PutObjectCommand({ Bucket: bucketName, Key: key, ContentType: contentType });
+      
+      // Presigned URL expires in 5 minutes
+      const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
+      const cdnBase = (process.env.NEXT_PUBLIC_CLOUDFRONT_URL || "https://www.galerievarinchi.com").replace(/\/$/, '').replace(/\/assets$/, '');
+      const finalUrl = `${cdnBase}/${key}`;
+      
+      return NextResponse.json({ uploadUrl, finalUrl });
+    }
+
+    // 2. Artist apply (Now JSON-based)
+    if (action[0] === 'artist' && action[1] === 'apply' && user) {
+      const {
+        fullName, email, phone, country, state, area, bio, specialization, portfolioLink,
+        examples, profilePhotoUrl, agreementIp, agreementVersion, agreementTimestamp, agreementPdfUrl
+      } = body;
+      
+      try {
         const [profile] = await db.insert(schema.artistProfile).values({
           id: crypto.randomUUID(),
           userId: user.id,
@@ -345,97 +397,199 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           bio,
           specialization,
           portfolioLink,
-          examples: JSON.stringify(urls),
+          examples: JSON.stringify(examples || []), // array of strings
+          profilePhoto: profilePhotoUrl || null,
+          ipAddress: agreementIp || request.headers.get('x-forwarded-for') || 'unknown',
+          agreementPdfUrl: agreementPdfUrl || null,
+          agreementVersion: agreementVersion || '1.0',
+          agreementTimestamp: agreementTimestamp || new Date().toISOString(),
           status: 'PENDING',
           updatedAt: new Date().toISOString()
-        }).returning();
+        })
+        .onConflictDoUpdate({
+          target: schema.artistProfile.userId,
+          set: {
+            fullName, phone, country, state, area, bio, specialization, portfolioLink,
+            examples: JSON.stringify(examples || []),
+            profilePhoto: profilePhotoUrl || null,
+            ipAddress: agreementIp || request.headers.get('x-forwarded-for') || 'unknown',
+            agreementPdfUrl,
+            agreementVersion,
+            agreementTimestamp,
+            updatedAt: new Date().toISOString()
+          }
+        })
+        .returning();
+        
+        // Notify admin
+        sendArtistApplicationEmail(fullName, email).catch(err => console.error('Admin email error:', err));
         
         return NextResponse.json({ profile });
-      }
-      
-      // Art request (Artwork Submission)
-      if (action[0] === 'artist' && action[1] === 'art-requests' && user) {
-        const profile = await db.query.artistProfile.findFirst({ where: eq(schema.artistProfile.userId, user.id) });
-        if (!profile) return NextResponse.json({ error: 'Artist profile not found' }, { status: 404 });
-        
-        const title = formData.get('title') as string;
-        const description = formData.get('description') as string;
-        const yearCreated = formData.get('yearCreated') as string;
-        const price = parseFloat(formData.get('price') as string);
-        const images = formData.getAll('images') as File[];
-        
-        const urls = await Promise.all(images.map(f => uploadToS3(f)));
-        
-        const [artReq] = await db.insert(schema.artRequest).values({
-          id: crypto.randomUUID(),
-          artistId: profile.id,
-          title,
-          description,
-          yearCreated,
-          price,
-          quantity: parseInt(formData.get('quantity') as string) || 1,
-          specifications: formData.get('specifications') as string || '[]',
-          images: JSON.stringify(urls),
-          status: 'PENDING',
-          categoryId: formData.get('categoryId') as string,
-          subCategoryId: formData.get('subCategoryId') as string,
-        }).returning();
-        
-        return NextResponse.json({ artReq });
-      }
-
-      // Generic Upload
-      if (action[0] === 'upload' && user?.isAdmin) {
-        const file = formData.get('file');
-        if (!file || !(file instanceof File)) {
-          return NextResponse.json({ error: 'No valid file provided' }, { status: 400 });
-        }
-        const url = await uploadToS3(file);
-        return NextResponse.json({ url });
+      } catch (dbError: any) {
+        console.error('DATABASE ERROR during artist apply:', dbError);
+        return NextResponse.json({ 
+          error: dbError.message || 'Database error',
+          detail: 'Failed to insert ArtistProfile. Make sure you don\'t already have a pending application.'
+        }, { status: 500 });
       }
     }
 
-    // JSON Handlers
-    const body = await request.json().catch(() => ({}));
+    // 3. Art request (Artwork Submission - Now JSON-based)
+    if (action[0] === 'artist' && action[1] === 'art-requests' && user) {
+      const profile = await db.query.artistProfile.findFirst({ where: eq(schema.artistProfile.userId, user.id) });
+      if (!profile) return NextResponse.json({ error: 'Artist profile not found' }, { status: 404 });
+      
+      const {
+        title, description, yearCreated, price, quantity, specifications, images, categoryId, subCategoryId
+      } = body;
+      
+      const [artReq] = await db.insert(schema.artRequest).values({
+        id: crypto.randomUUID(),
+        artistId: profile.id,
+        title,
+        description,
+        yearCreated,
+        price: parseFloat(price),
+        quantity: parseInt(quantity) || 1,
+        specifications: specifications || '[]',
+        images: JSON.stringify(images || []), // array of strings
+        status: 'PENDING',
+        categoryId,
+        subCategoryId,
+      }).returning();
+      
+      // Notify admin
+      sendArtworkSubmissionEmail(profile.fullName, title).catch(err => console.error('Admin email error:', err));
+      
+      return NextResponse.json({ artReq });
+    }
+
+    // 4. Artist profile edit
+    if (action[0] === 'artist' && action[1] === 'profile' && action[2] === 'edit' && user) {
+       const profile = await db.query.artistProfile.findFirst({ where: eq(schema.artistProfile.userId, user.id) });
+       if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+       
+       const { bio, portfolioLink, phone, specialization } = body;
+       const [updated] = await db.update(schema.artistProfile)
+         .set({ bio, portfolioLink, phone, specialization, updatedAt: new Date().toISOString() })
+         .where(eq(schema.artistProfile.id, profile.id))
+         .returning();
+         
+       return NextResponse.json({ profile: updated });
+    }
 
     if (action[0] === 'auth') {
       const email = body.email?.trim().toLowerCase();
-      const otp = body.otp?.trim();
       
-      if (action[1] === 'signin' || action[1] === 'signup' || action[1] === 'otp' || action[1] === 'verify-otp') {
-          if (!otp) {
-            // Check existence for sign-in
-            if (action[1] === 'signin' || action[1] === 'otp') {
-              const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
-              if (!u) {
-                return NextResponse.json({ error: 'Account not found. Please sign up instead.' }, { status: 404 });
-              }
-            }
-            
-            // Check if user already exists for sign-up
-            if (action[1] === 'signup') {
-              const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
-              if (u) {
-                return NextResponse.json({ error: 'Account already exists. Please sign in instead.' }, { status: 400 });
-              }
-            }
-
-            console.log('[Auth] Generating OTP for:', email);
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
-            const newExpiresAt = new Date(Date.now() + 600000).toISOString();
-            try {
-              await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
-                .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
-              console.log('[Auth] OTP stored in DB');
-              await sendOtpEmail(email, code);
-              console.log('[Auth] OTP email sent');
-              return NextResponse.json({ message: 'Sent' });
-            } catch (dbErr: any) {
-              console.error('[Auth] DB/Email Error:', dbErr);
-              throw dbErr;
-            }
-          }
+      // Password-based Sign In
+      if (action[1] === 'signin') {
+        const password = body.password;
+        if (!email || !password) {
+          return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+        }
         
+        const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
+        if (!u) {
+          return NextResponse.json({ error: 'Account not found. Please sign up instead.' }, { status: 404 });
+        }
+        if (!u.passwordHash) {
+          return NextResponse.json({ error: 'Password not set. Please use "Forgot Password" to set one.' }, { status: 400 });
+        }
+        
+        const valid = await verifyPassword(password, u.passwordHash);
+        if (!valid) {
+          return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
+        }
+        
+        // Create session
+        const sId = crypto.randomUUID();
+        const token = await createToken(u.id, sId);
+        await db.insert(schema.session).values({ 
+          id: sId, userId: u.id, token, 
+          expiresAt: new Date(Date.now() + 604800 * 1000).toISOString() 
+        });
+        
+        const res = NextResponse.json({ user: u });
+        res.cookies.set('auth-token', token, { 
+          httpOnly: true, secure: process.env.NODE_ENV === 'production', 
+          maxAge: 604800, path: '/' 
+        });
+        return res;
+      }
+      
+      // Sign Up — Step 1: send OTP (with password stored temporarily)
+      if (action[1] === 'signup') {
+        const password = body.password;
+        const otp = body.otp?.trim();
+        
+        if (!otp) {
+          // Step 1: Validate and send OTP
+          if (!email || !password || password.length < 6) {
+            return NextResponse.json({ error: 'Email and password (min 6 chars) are required' }, { status: 400 });
+          }
+          
+          const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
+          if (u) {
+            return NextResponse.json({ error: 'Account already exists. Please sign in instead.' }, { status: 400 });
+          }
+          
+          const code = Math.floor(100000 + Math.random() * 900000).toString();
+          const newExpiresAt = new Date(Date.now() + 600000).toISOString();
+          await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
+            .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
+          await sendOtpEmail(email, code);
+          return NextResponse.json({ message: 'Sent' });
+        }
+        
+        // Step 2: Verify OTP and create user with password
+        const record = await db.query.otpToken.findFirst({ 
+          where: eq(schema.otpToken.email, email), 
+          orderBy: [desc(schema.otpToken.createdAt)] 
+        });
+        
+        if (!record || record.otp !== otp || record.used || new Date(record.expiresAt).getTime() < Date.now()) {
+          return NextResponse.json({ error: 'Invalid or Expired OTP' }, { status: 400 });
+        }
+        
+        const isAdminEmail = email === 'admin@galerievarinchi.com';
+        const hashedPw = password ? await hashPassword(password) : null;
+        
+        const [u] = await db.insert(schema.user).values({ 
+          id: crypto.randomUUID(), email, passwordHash: hashedPw, isAdmin: isAdminEmail 
+        }).returning();
+        
+        await db.update(schema.otpToken).set({ used: true }).where(eq(schema.otpToken.id, record.id));
+        
+        const sId = crypto.randomUUID();
+        const token = await createToken(u.id, sId);
+        await db.insert(schema.session).values({ 
+          id: sId, userId: u.id, token, 
+          expiresAt: new Date(Date.now() + 604800 * 1000).toISOString() 
+        });
+        
+        const res = NextResponse.json({ user: u });
+        res.cookies.set('auth-token', token, { 
+          httpOnly: true, secure: process.env.NODE_ENV === 'production', 
+          maxAge: 604800, path: '/' 
+        });
+        return res;
+      }
+      
+      // Verify OTP (for artist signup flow — OTP only, no password in this step)
+      if (action[1] === 'verify-otp' || action[1] === 'otp') {
+        const otp = body.otp?.trim();
+        
+        if (!otp) {
+          // Just send OTP
+          const code = Math.floor(100000 + Math.random() * 900000).toString();
+          const newExpiresAt = new Date(Date.now() + 600000).toISOString();
+          await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
+            .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
+          await sendOtpEmail(email, code);
+          return NextResponse.json({ message: 'Sent' });
+        }
+        
+        // Verify OTP
         const record = await db.query.otpToken.findFirst({ 
           where: eq(schema.otpToken.email, email), 
           orderBy: [desc(schema.otpToken.createdAt)] 
@@ -447,9 +601,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         
         let u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
         const isAdminEmail = email === 'admin@galerievarinchi.com';
+        const password = body.password;
         
-        if (!u && (action[1] === 'signup' || body.isSignup)) {
-          [u] = await db.insert(schema.user).values({ id: crypto.randomUUID(), email, isAdmin: isAdminEmail }).returning();
+        if (!u && body.isSignup) {
+          const hashedPw = password ? await hashPassword(password) : null;
+          [u] = await db.insert(schema.user).values({ 
+            id: crypto.randomUUID(), email, passwordHash: hashedPw, isAdmin: isAdminEmail 
+          }).returning();
         } else if (u && isAdminEmail && !u.isAdmin) {
           [u] = await db.update(schema.user).set({ isAdmin: true }).where(eq(schema.user.id, u.id)).returning();
         }
@@ -461,20 +619,59 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const token = await createToken(u.id, sId);
         
         await db.insert(schema.session).values({ 
-          id: sId, 
-          userId: u.id, 
-          token, 
+          id: sId, userId: u.id, token, 
           expiresAt: new Date(Date.now() + 604800 * 1000).toISOString() 
         });
         
         const res = NextResponse.json({ user: u });
         res.cookies.set('auth-token', token, { 
-          httpOnly: true, 
-          secure: process.env.NODE_ENV === 'production', 
-          maxAge: 604800,
-          path: '/'
+          httpOnly: true, secure: process.env.NODE_ENV === 'production', 
+          maxAge: 604800, path: '/' 
         });
         return res;
+      }
+      
+      // Forgot Password — send OTP to registered email
+      if (action[1] === 'forgot-password') {
+        if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+        
+        const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
+        if (!u) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+        
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const newExpiresAt = new Date(Date.now() + 600000).toISOString();
+        await db.insert(schema.otpToken).values({ id: crypto.randomUUID(), email, otp: code, expiresAt: newExpiresAt })
+          .onConflictDoUpdate({ target: schema.otpToken.email, set: { otp: code, used: false, expiresAt: newExpiresAt } });
+        await sendOtpEmail(email, code);
+        return NextResponse.json({ message: 'OTP sent to your email' });
+      }
+      
+      // Reset Password — verify OTP and set new password
+      if (action[1] === 'reset-password') {
+        const otp = body.otp?.trim();
+        const newPassword = body.newPassword;
+        
+        if (!email || !otp || !newPassword || newPassword.length < 6) {
+          return NextResponse.json({ error: 'Email, OTP, and new password (min 6 chars) required' }, { status: 400 });
+        }
+        
+        const record = await db.query.otpToken.findFirst({ 
+          where: eq(schema.otpToken.email, email), 
+          orderBy: [desc(schema.otpToken.createdAt)] 
+        });
+        
+        if (!record || record.otp !== otp || record.used || new Date(record.expiresAt).getTime() < Date.now()) {
+          return NextResponse.json({ error: 'Invalid or Expired OTP' }, { status: 400 });
+        }
+        
+        const u = await db.query.user.findFirst({ where: eq(schema.user.email, email) });
+        if (!u) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        
+        const hashedPw = await hashPassword(newPassword);
+        await db.update(schema.user).set({ passwordHash: hashedPw }).where(eq(schema.user.id, u.id));
+        await db.update(schema.otpToken).set({ used: true }).where(eq(schema.otpToken.id, record.id));
+        
+        return NextResponse.json({ message: 'Password updated successfully' });
       }
       
       if (action[1] === 'logout' || action[1] === 'signout') {
@@ -483,6 +680,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return res;
       }
     }
+
 
     if (action[0] === 'cart' && user) {
       const [item] = await db.insert(schema.cartItem).values({ id: crypto.randomUUID(), userId: user.id, ...body }).returning();
@@ -495,16 +693,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (action[0] === 'orders' && user) {
-      // Placing Order
+      // Calculate discount from coupon if provided
+      let couponId: string | null = null;
+      let discountAmount: number | null = null;
+      let subtotal = body.items.reduce((sum: number, i: any) => sum + (i.price * i.quantity), 0);
+      
+      if (body.couponCode) {
+        const c = await db.query.coupon.findFirst({ where: eq(schema.coupon.code, body.couponCode.toUpperCase().trim()) });
+        if (c && c.isActive && (!c.expiresAt || new Date(c.expiresAt).getTime() > Date.now())) {
+          couponId = c.id;
+          discountAmount = Math.round((subtotal * c.discountPercent / 100) * 100) / 100;
+          subtotal = subtotal - discountAmount;
+        }
+      }
+      
       const [order] = await db.insert(schema.order).values({
         id: crypto.randomUUID(),
         userId: user.id,
         status: 'NEW',
-        totalAmount: body.items.reduce((sum: number, i: any) => sum + (i.price * i.quantity), 0),
+        totalAmount: subtotal,
         customerName: user.name,
         customerEmail: user.email,
         customerPhone: user.phone,
         customerAddress: user.address,
+        couponId,
+        discountAmount,
       }).returning();
       
       const items = body.items.map((i: any) => ({
@@ -540,7 +753,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           .where(eq(schema.artRequest.id, action[2]))
           .returning();
         
-        // If approved, create a product automatically
         if (body.action === 'APPROVE') {
            const imageUrls = getImages(artReq.images);
            await db.insert(schema.product).values({
@@ -563,6 +775,42 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         
         return NextResponse.json({ artReq });
       }
+      
+      // Testimonial management
+      if (action[1] === 'testimonials' && action[2]) {
+        // Toggle active or delete handled in PUT/DELETE
+        return NextResponse.json({ error: 'Use PUT or DELETE' }, { status: 405 });
+      }
+      
+      // Coupon management
+      if (action[1] === 'coupons') {
+        const couponCode = body.code?.toUpperCase().trim();
+        if (!couponCode || !body.discountPercent || body.discountPercent <= 0 || body.discountPercent > 100) {
+          return NextResponse.json({ error: 'Valid code and discount percent (1-100) required' }, { status: 400 });
+        }
+        const existing = await db.query.coupon.findFirst({ where: eq(schema.coupon.code, couponCode) });
+        if (existing) return NextResponse.json({ error: 'Coupon code already exists' }, { status: 400 });
+        
+        const [c] = await db.insert(schema.coupon).values({
+          id: crypto.randomUUID(),
+          code: couponCode,
+          discountPercent: body.discountPercent,
+          expiresAt: body.expiresAt ? new Date(body.expiresAt).toISOString() : null,
+        }).returning();
+        return NextResponse.json({ coupon: c }, { status: 201 });
+      }
+    }
+    
+    // Public: Validate coupon
+    if (action[0] === 'coupons' && action[1] === 'validate') {
+      const couponCode = body.code?.toUpperCase().trim();
+      if (!couponCode) return NextResponse.json({ error: 'Coupon code required' }, { status: 400 });
+      const c = await db.query.coupon.findFirst({ where: eq(schema.coupon.code, couponCode) });
+      if (!c || !c.isActive) return NextResponse.json({ error: 'Invalid coupon code' }, { status: 404 });
+      if (c.expiresAt && new Date(c.expiresAt).getTime() < Date.now()) {
+        return NextResponse.json({ error: 'Coupon has expired' }, { status: 400 });
+      }
+      return NextResponse.json({ coupon: { id: c.id, code: c.code, discountPercent: c.discountPercent } });
     }
 
     if (action[0] === 'testimonials' && user) {
@@ -642,6 +890,22 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (action[0] === 'artist' && action[1] === 'profile' && user) {
        const [p] = await db.update(schema.artistProfile).set(body).where(eq(schema.artistProfile.userId, user.id)).returning();
        return NextResponse.json({ profile: p });
+    }
+    // Admin: Toggle testimonial active
+    if (action[0] === 'admin' && action[1] === 'testimonials' && action[2] && user?.isAdmin) {
+      const [t] = await db.update(schema.testimonial)
+        .set({ isActive: body.isActive })
+        .where(eq(schema.testimonial.id, action[2]))
+        .returning();
+      return NextResponse.json({ testimonial: t });
+    }
+    // Admin: Toggle coupon active
+    if (action[0] === 'admin' && action[1] === 'coupons' && action[2] && user?.isAdmin) {
+      const [c] = await db.update(schema.coupon)
+        .set({ isActive: body.isActive })
+        .where(eq(schema.coupon.id, action[2]))
+        .returning();
+      return NextResponse.json({ coupon: c });
     }
     if (action[0] === 'cart' && user) {
       const [item] = await db.update(schema.cartItem).set({ quantity: body.quantity }).where(and(eq(schema.cartItem.id, body.id), eq(schema.cartItem.userId, user.id))).returning();
@@ -748,6 +1012,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       revalidatePath('/category', 'layout');
       revalidatePath('/');
       
+      return NextResponse.json({ message: 'Removed' });
+    }
+    // Admin: Delete testimonial
+    if (action[0] === 'admin' && action[1] === 'testimonials' && action[2] && user?.isAdmin) {
+      await db.delete(schema.testimonial).where(eq(schema.testimonial.id, action[2]));
+      return NextResponse.json({ message: 'Removed' });
+    }
+    // Admin: Delete coupon
+    if (action[0] === 'admin' && action[1] === 'coupons' && action[2] && user?.isAdmin) {
+      await db.delete(schema.coupon).where(eq(schema.coupon.id, action[2]));
       return NextResponse.json({ message: 'Removed' });
     }
     return NextResponse.json({ error: 'Not Found' }, { status: 404 });

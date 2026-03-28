@@ -5,6 +5,31 @@ import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 import { getSecret } from './secrets';
 
+const PBKDF2_ITERATIONS = 100000;
+const KEY_LENGTH = 64;
+const DIGEST = 'sha512';
+
+export async function hashPassword(password: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(32).toString('hex');
+    crypto.pbkdf2(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH, DIGEST, (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(`${salt}:${derivedKey.toString('hex')}`);
+    });
+  });
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const [salt, key] = hash.split(':');
+    crypto.pbkdf2(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH, DIGEST, (err, derivedKey) => {
+      if (err) reject(err);
+      resolve(derivedKey.toString('hex') === key);
+    });
+  });
+}
+
+
 function base64UrlEncode(obj: any): string {
   return Buffer.from(JSON.stringify(obj))
     .toString('base64')

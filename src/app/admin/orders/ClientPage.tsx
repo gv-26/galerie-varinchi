@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 
 interface OrderItem {
@@ -24,6 +24,7 @@ interface Order {
   customerAddress: string | null;
   createdAt: string;
   items: OrderItem[];
+  discountAmount?: number | null;
 }
 
 const TABS = [
@@ -51,6 +52,11 @@ export default function OrdersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [moving, setMoving] = useState(false);
 
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -69,11 +75,46 @@ export default function OrdersPage() {
     fetchOrders();
   }, [fetchOrders]);
 
+  // Client-side filtering
+  const filteredOrders = useMemo(() => {
+    let result = orders;
+
+    // Date filter
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      result = result.filter(o => new Date(o.createdAt) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter(o => new Date(o.createdAt) <= to);
+    }
+
+    // Search filter (customer name/email, product title, order ID)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(o => {
+        const items = (o as any).orderItems || o.items || [];
+        const productMatch = items.some((item: any) => item?.product?.title?.toLowerCase().includes(q));
+        return (
+          o.id.toLowerCase().includes(q) ||
+          o.customerName?.toLowerCase().includes(q) ||
+          o.customerEmail?.toLowerCase().includes(q) ||
+          o.transactionId?.toLowerCase().includes(q) ||
+          productMatch
+        );
+      });
+    }
+
+    return result;
+  }, [orders, dateFrom, dateTo, searchQuery]);
+
   const toggleSelectAll = () => {
-    if (selected.size === (orders || []).length) {
+    if (selected.size === (filteredOrders || []).length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set((orders || []).map(o => o.id)));
+      setSelected(new Set((filteredOrders || []).map(o => o.id)));
     }
   };
 
@@ -111,6 +152,14 @@ export default function OrdersPage() {
     window.open(`/api/orders/export?status=${activeTab}`, '_blank');
   };
 
+  const clearFilters = () => {
+    setSearchQuery('');
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const hasFilters = searchQuery || dateFrom || dateTo;
+
   return (
     <div className="page-content fade-in">
       <div className="container">
@@ -131,6 +180,40 @@ export default function OrdersPage() {
           </div>
         </div>
 
+        {/* Filters */}
+        <div className="profile-card" style={{ marginBottom: 'var(--space-lg)', padding: 'var(--space-md) var(--space-lg)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 'var(--space-md)', alignItems: 'end' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="text-xs text-muted">Search</label>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by customer, product, order ID..."
+                style={{ fontSize: '13px' }}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="text-xs text-muted">From Date</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ fontSize: '13px' }} />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="text-xs text-muted">To Date</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ fontSize: '13px' }} />
+            </div>
+            {hasFilters && (
+              <button className="btn btn-ghost btn-sm" onClick={clearFilters} style={{ whiteSpace: 'nowrap' }}>
+                ✕ Clear
+              </button>
+            )}
+          </div>
+          {hasFilters && (
+            <p className="text-xs text-muted" style={{ marginTop: 'var(--space-sm)' }}>
+              Showing {filteredOrders.length} of {orders.length} orders
+            </p>
+          )}
+        </div>
+
         <div className="tabs">
           {TABS.map(tab => (
             <button
@@ -147,9 +230,9 @@ export default function OrdersPage() {
           <div style={{ textAlign: 'center', padding: 'var(--space-2xl)' }}>
             <div className="spinner"></div>
           </div>
-        ) : orders.length === 0 ? (
+        ) : filteredOrders.length === 0 ? (
           <div className="empty-state">
-            <p>No orders in this category.</p>
+            <p>{hasFilters ? 'No orders match your filters.' : 'No orders in this category.'}</p>
           </div>
         ) : (
           <div className="table-container">
@@ -159,7 +242,7 @@ export default function OrdersPage() {
                   <th>
                     <input
                       type="checkbox"
-                      checked={selected.size === (orders || []).length && (orders || []).length > 0}
+                      checked={selected.size === (filteredOrders || []).length && (filteredOrders || []).length > 0}
                       onChange={toggleSelectAll}
                       style={{ width: 16, height: 16 }}
                     />
@@ -175,7 +258,7 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody>
-                {(orders || []).map(order => {
+                {(filteredOrders || []).map(order => {
                   const items = (order as any).orderItems || order.items || [];
                   return (items || []).map((item: any, idx: number) => {
                     return (
@@ -219,7 +302,18 @@ export default function OrdersPage() {
                           </>
                         )}
                       </td>
-                      <td>{idx === 0 ? `₹${order.totalAmount.toLocaleString()}` : ''}</td>
+                      <td>
+                        {idx === 0 && (
+                          <>
+                            ₹{order.totalAmount.toLocaleString()}
+                            {order.discountAmount ? (
+                              <span className="text-xs text-muted" style={{ display: 'block' }}>
+                                -₹{order.discountAmount.toLocaleString()} discount
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
                       <td className="text-xs" style={{ fontFamily: 'monospace, sans-serif' }}>
                         {idx === 0 ? (order.transactionId || '—') : ''}
                       </td>

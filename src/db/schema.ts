@@ -45,6 +45,7 @@ export const product = pgTable("Product", {
 	image: text().notNull(),
 	images: text().default('[]').notNull(),
 	subCategoryId: text().notNull(),
+	artistProfileId: text(),
 	status: text().default('active').notNull(),
 	mediums: text().default('[]').notNull(),
 	frameTypes: text().default('[]').notNull(),
@@ -113,6 +114,8 @@ export const order = pgTable("Order", {
 	customerEmail: text().notNull(),
 	customerPhone: text(),
 	customerAddress: text(),
+	couponId: text(),
+	discountAmount: doublePrecision(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
 	foreignKey({
@@ -151,6 +154,7 @@ export const user = pgTable("User", {
 	name: text(),
 	phone: text(),
 	address: text(),
+	passwordHash: text(),
 	isAdmin: boolean().default(false).notNull(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
@@ -210,6 +214,7 @@ export const testimonial = pgTable("Testimonial", {
 	text: text().notNull(),
 	userId: text().notNull(),
 	productId: text().notNull(),
+	isActive: boolean().default(true).notNull(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
 	foreignKey({
@@ -237,6 +242,11 @@ export const artistProfile = pgTable("ArtistProfile", {
 	bio: text().notNull(),
 	specialization: text().notNull(),
 	examples: text().default('[]').notNull(),
+	profilePhoto: text(),
+	ipAddress: text(),
+	agreementPdfUrl: text(),
+	agreementVersion: text(),
+	agreementTimestamp: timestamp({ precision: 3, mode: 'string' }),
 	status: text().default('PENDING').notNull(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 	updatedAt: timestamp({ precision: 3, mode: 'string' }).notNull(),
@@ -247,4 +257,15 @@ export const artistProfile = pgTable("ArtistProfile", {
 			foreignColumns: [user.id],
 			name: "ArtistProfile_userId_fkey"
 		}).onUpdate("cascade").onDelete("cascade"),
+]);
+
+export const coupon = pgTable("Coupon", {
+	id: text().primaryKey().notNull(),
+	code: text().notNull(),
+	discountPercent: doublePrecision().notNull(),
+	isActive: boolean().default(true).notNull(),
+	expiresAt: timestamp({ precision: 3, mode: 'string' }),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+	uniqueIndex("Coupon_code_key").using("btree", table.code.asc().nullsLast().op("text_ops")),
 ]);

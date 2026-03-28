@@ -16,6 +16,8 @@ interface ArtistRequest {
   bio: string;
   specialization: string;
   examples: string; // JSON Array String
+  agreementPdfUrl?: string | null;
+  ipAddress?: string | null;
   createdAt: string;
 }
 
@@ -26,6 +28,24 @@ export default function AdminArtistReviewDetail({ params }: { params: Promise<{ 
   const [request, setRequest] = useState<ArtistRequest | null>(null);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
+  const handleDownload = async (url: string, index: number) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `artist-example-${index + 1}.${blob.type.split('/')[1] || 'jpg'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
 
   useEffect(() => {
     fetch(`/api/admin/artists/requests/${id}`)
@@ -92,7 +112,7 @@ export default function AdminArtistReviewDetail({ params }: { params: Promise<{ 
               <p>{request.email}</p>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-md)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-md)' }}>
             <div>
               <label className="text-xs text-muted">Phone Number</label>
               <p>{request.phone}</p>
@@ -105,6 +125,10 @@ export default function AdminArtistReviewDetail({ params }: { params: Promise<{ 
               <label className="text-xs text-muted">State / Area</label>
               <p>{request.state}, {request.area}</p>
             </div>
+             <div>
+              <label className="text-xs text-muted">Registration IP</label>
+              <p>{request.ipAddress || 'Unknown'}</p>
+            </div>
           </div>
 
           <hr style={{ margin: 'var(--space-xl) 0', border: 0, borderTop: '1px solid var(--color-border-light)' }} />
@@ -114,6 +138,16 @@ export default function AdminArtistReviewDetail({ params }: { params: Promise<{ 
             <label className="text-xs text-muted">Portfolio Link</label>
             <p><a href={request.portfolioLink} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{request.portfolioLink} ↗</a></p>
           </div>
+          {request.agreementPdfUrl && (
+            <div className="form-group">
+              <label className="text-xs text-muted">Signed Agreement</label>
+              <p>
+                <a href={request.agreementPdfUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--space-xs)' }}>
+                  📄 View Signed Agreement PDF
+                </a>
+              </p>
+            </div>
+          )}
           <div className="form-group">
             <label className="text-xs text-muted">Specialization</label>
             <p>{request.specialization}</p>
@@ -133,9 +167,33 @@ export default function AdminArtistReviewDetail({ params }: { params: Promise<{ 
               {exampleFiles.map((file, i) => {
                 const isImage = file.match(/\.(jpeg|jpg|png|webp)$/i);
                 return (
-                  <div key={i} className="profile-card" style={{ padding: 'var(--space-sm)', background: 'var(--color-bg-light)', textAlign: 'center' }}>
+                  <div key={i} className="profile-card" style={{ padding: 'var(--space-sm)', background: 'var(--color-bg-light)', textAlign: 'center', position: 'relative' }}>
                     {isImage ? (
-                      <img src={file} alt={`Example ${i+1}`} style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '4px' }} />
+                      <div style={{ position: 'relative', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setLightboxImage(file)}>
+                         <img src={file} alt={`Example ${i+1}`} style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'cover', display: 'block', margin: '0 auto' }} />
+                         <div style={{
+                            position: 'absolute', inset: 0,
+                            background: 'rgba(0,0,0,0.5)', opacity: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                            transition: 'opacity 0.2s',
+                          }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setLightboxImage(file); }}
+                              style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              title="Enlarge"
+                            >🔍</button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleDownload(file, i); }}
+                              style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              title="Download"
+                            >⬇</button>
+                          </div>
+                      </div>
                     ) : (
                       <div style={{ padding: 'var(--space-md)' }}>
                         📄 <a href={file} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: 'var(--space-xs)', color: 'var(--color-accent)' }}>View Attachment {i+1} ↗</a>
@@ -166,6 +224,37 @@ export default function AdminArtistReviewDetail({ params }: { params: Promise<{ 
           </div>
         </div>
       </div>
+
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0, 0, 0, 0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, cursor: 'zoom-out', padding: '40px',
+          }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}
+            style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', fontSize: '20px', cursor: 'pointer' }}
+          >✕</button>
+          <img
+            src={lightboxImage}
+            alt="Enlarged artwork"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '8px', cursor: 'default' }}
+          />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const idx = exampleFiles.indexOf(lightboxImage);
+              handleDownload(lightboxImage, idx >= 0 ? idx : 0);
+            }}
+            style={{ position: 'absolute', bottom: '20px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', cursor: 'pointer' }}
+          >⬇ Download Image</button>
+        </div>
+      )}
     </div>
   );
 }

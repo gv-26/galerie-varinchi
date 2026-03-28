@@ -28,6 +28,7 @@ export default function AdminArtworkReviewDetail({ params }: { params: Promise<{
   const [request, setRequest] = useState<ArtRequest | null>(null);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/admin/artwork-requests/${id}`)
@@ -64,6 +65,23 @@ export default function AdminArtworkReviewDetail({ params }: { params: Promise<{
       setError('An error occurred');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleDownload = async (url: string, index: number) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `artwork-${index + 1}.${blob.type.split('/')[1] || 'jpg'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
     }
   };
 
@@ -153,26 +171,55 @@ export default function AdminArtworkReviewDetail({ params }: { params: Promise<{
           {images.length === 0 ? (
             <p className="text-sm text-muted">No images uploaded.</p>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-md)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-md)' }}>
               {images.map((file, i) => (
-                <div key={i} className="profile-card" style={{ padding: 'var(--space-sm)', background: 'var(--color-bg-light)', textAlign: 'center' }}>
-                  <img src={file} alt={`Artwork ${i+1}`} style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'cover', borderRadius: '4px' }} />
+                <div key={i} style={{ position: 'relative', borderRadius: 'var(--radius-sm)', overflow: 'hidden', aspectRatio: '1', cursor: 'pointer', border: '1px solid var(--color-border-light)' }}
+                  onClick={() => setLightboxImage(file)}
+                >
+                  <img
+                    src={file}
+                    alt={`Artwork ${i+1}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    opacity: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                    transition: 'opacity 0.2s',
+                  }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setLightboxImage(file); }}
+                      style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Enlarge"
+                    >🔍</button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleDownload(file, i); }}
+                      style={{ background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Download"
+                    >⬇</button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
           <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-2xl)' }}>
-            <Link 
-              href={`/admin/add-product?requestId=${request.id}`} 
-              className="btn btn-primary btn-full" 
+            <Link
+              href={`/admin/add-product?requestId=${request.id}`}
+              className="btn btn-primary btn-full"
               style={{ background: 'var(--color-success)', borderColor: 'var(--color-success)', textAlign: 'center' }}
             >
               Add to Products
             </Link>
-            <button 
-              className="btn btn-danger btn-full" 
-              onClick={handleDecline} 
+            <button
+              className="btn btn-danger btn-full"
+              onClick={handleDecline}
               disabled={actionLoading}
             >
               Decline Request
@@ -180,6 +227,81 @@ export default function AdminArtworkReviewDetail({ params }: { params: Promise<{
           </div>
         </div>
       </div>
+
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            cursor: 'zoom-out',
+            padding: '40px',
+          }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              fontSize: '20px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ✕
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Enlarged artwork"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+              borderRadius: '8px',
+              cursor: 'default',
+            }}
+          />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const idx = images.indexOf(lightboxImage);
+              handleDownload(lightboxImage, idx >= 0 ? idx : 0);
+            }}
+            style={{
+              position: 'absolute',
+              bottom: '20px',
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '8px',
+              padding: '10px 24px',
+              fontSize: '14px',
+              cursor: 'pointer',
+            }}
+          >
+            ⬇ Download Image
+          </button>
+        </div>
+      )}
     </div>
   );
 }
