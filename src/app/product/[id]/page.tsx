@@ -195,6 +195,14 @@ export default function ProductPage() {
             <p className="text-uppercase text-muted" style={{ marginBottom: 'var(--space-sm)' }}>
               {product.subCategory?.category?.name || CATEGORY_LABELS[product.category] || product.category}
             </p>
+            {(product as any).artistProfile && (
+              <p className="text-sm" style={{ marginBottom: 'var(--space-sm)' }}>
+                By{' '}
+                <a href={`/artist/${(product as any).artistProfile.id}`} style={{ color: 'var(--color-accent)', fontWeight: 500 }}>
+                  {(product as any).artistProfile.fullName}
+                </a>
+              </p>
+            )}
             <h1>{product.title}</h1>
             <p className="price">₹{currentPrice.toLocaleString()}</p>
             <p className="description">{product.description}</p>

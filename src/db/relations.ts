@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { category, subCategory, product, user, cartItem, wishlistItem, order, orderItem, artistProfile, artRequest, session, testimonial } from "./schema";
+import { category, subCategory, product, user, cartItem, wishlistItem, order, orderItem, artistProfile, artRequest, session, testimonial, coupon } from "./schema";
 
 export const subCategoryRelations = relations(subCategory, ({one, many}) => ({
 	category: one(category, {
@@ -19,6 +19,10 @@ export const productRelations = relations(product, ({one, many}) => ({
 	subCategory: one(subCategory, {
 		fields: [product.subCategoryId],
 		references: [subCategory.id]
+	}),
+	artistProfile: one(artistProfile, {
+		fields: [product.artistProfileId],
+		references: [artistProfile.id]
 	}),
 	cartItems: many(cartItem),
 	wishlistItems: many(wishlistItem),
@@ -62,6 +66,10 @@ export const orderRelations = relations(order, ({one, many}) => ({
 		fields: [order.userId],
 		references: [user.id]
 	}),
+	coupon: one(coupon, {
+		fields: [order.couponId],
+		references: [coupon.id]
+	}),
 	orderItems: many(orderItem),
 }));
 
@@ -93,6 +101,7 @@ export const artRequestRelations = relations(artRequest, ({one}) => ({
 
 export const artistProfileRelations = relations(artistProfile, ({one, many}) => ({
 	artRequests: many(artRequest),
+	products: many(product),
 	user: one(user, {
 		fields: [artistProfile.userId],
 		references: [user.id]
@@ -115,4 +124,8 @@ export const testimonialRelations = relations(testimonial, ({one}) => ({
 		fields: [testimonial.productId],
 		references: [product.id]
 	}),
+}));
+
+export const couponRelations = relations(coupon, ({many}) => ({
+	orders: many(order),
 }));

@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import jsPDF from 'jspdf';
+import { resizeImage } from '@/lib/image-utils';
 
 const ARTIST_AGREEMENT_VERSION = 'v1.0';
 const ARTIST_AGREEMENT_TEXT = `ARTIST AGREEMENT — GALERIE VARINCHI
@@ -93,6 +95,9 @@ export default function ArtistSignUpPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [country, setCountry] = useState('');
   const [state, setState] = useState('');
   const [area, setArea] = useState('');
@@ -100,9 +105,17 @@ export default function ArtistSignUpPage() {
   const [bio, setBio] = useState('');
   const [specialization, setSpecialization] = useState('');
 
+  // Profile photo
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState('');
+  const profilePhotoRef = useRef<HTMLInputElement>(null);
+
   // Multi-file upload state (File[] for append behavior)
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fullscreen preview
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // T&C state
   const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
@@ -163,11 +176,31 @@ export default function ArtistSignUpPage() {
 
   const signatureMatches = digitalSignature.trim().toLowerCase() === fullName.trim().toLowerCase();
 
+  const handleProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLoading(true);
+      try {
+        const finalFile = await resizeImage(file);
+        setProfilePhoto(finalFile);
+        const url = URL.createObjectURL(finalFile);
+        setProfilePhotoPreview(url);
+        setError('');
+      } catch (err) {
+        setError('Failed to process image. Please try another one.');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const getMissingFields = () => {
     const missing: string[] = [];
     if (!fullName.trim()) missing.push('Full Name');
     if (!email.trim()) missing.push('Email Address');
     if (!phone.trim()) missing.push('Phone Number');
+    if (!password || password.length < 6) missing.push('Password (min 6 characters)');
+    if (password !== confirmPassword) missing.push('Passwords must match');
     if (!country.trim()) missing.push('Country');
     if (!state.trim()) missing.push('State');
     if (!area.trim()) missing.push('Area');
@@ -210,7 +243,8 @@ export default function ArtistSignUpPage() {
     setError('');
 
     try {
-      const res = await fetch('/api/auth/signup', {
+      // Send OTP to email — works for both new and existing users
+      const res = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -220,7 +254,7 @@ export default function ArtistSignUpPage() {
       if (res.ok) {
         setStep('otp');
       } else {
-        setError(data.error || 'Failed to send OTP. Email might already be registered.');
+        setError(data.error || 'Failed to send OTP. Please try again.');
       }
     } catch (err) {
       setError('Something went wrong. Please try again.');
@@ -239,51 +273,139 @@ export default function ArtistSignUpPage() {
       const verifyRes = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp, isSignup: true }),
+        body: JSON.stringify({ email, otp, password, isSignup: true }),
       });
 
-      const verifyData = await verifyRes.json();
+      let verifyData;
+      const verifyText = await verifyRes.text();
+      try { verifyData = JSON.parse(verifyText); } catch { verifyData = { error: verifyText }; }
+      
       if (!verifyRes.ok) {
         setError(verifyData.error || 'Invalid or expired OTP');
         setLoading(false);
         return;
       }
 
-      // 2. Submit artist application
-      const formData = new FormData();
-      formData.append('fullName', fullName);
-      formData.append('email', email);
-      formData.append('phone', phone);
-      formData.append('country', country);
-      formData.append('state', state);
-      formData.append('area', area);
-      formData.append('portfolioLink', portfolioLink);
-      formData.append('bio', bio);
-      formData.append('specialization', specialization);
+      // Helper to upload a file to S3 via Presigned URL
+      const uploadToS3Presigned = async (file: File) => {
+        const preRes = await fetch('/api/upload/presigned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, contentType: file.type || 'application/octet-stream' })
+        });
+        if (!preRes.ok) throw new Error('Failed to get upload URL');
+        const { uploadUrl, finalUrl } = await preRes.json();
+        
+        const putRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file
+        });
+        if (!putRes.ok) throw new Error('Failed to upload file to S3');
+        return finalUrl;
+      };
 
-      // Agreement metadata
-      formData.append('agreementTimestamp', new Date().toISOString());
-      formData.append('agreementIp', userIp);
-      formData.append('agreementVersion', ARTIST_AGREEMENT_VERSION);
-
-      // Append files
-      for (const file of files) {
-        formData.append('examples', file);
+      // 2. Generate PDF of the Agreement
+      let agreementPdfUrl = null;
+      try {
+        const doc = new jsPDF({ format: 'a4', unit: 'pt' });
+        const margin = 40;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const textWidth = pageWidth - margin * 2;
+        
+        let y = margin;
+        doc.setFontSize(22);
+        doc.setFont('helvetica', 'bold');
+        doc.text('GALERIE VARINCHI', pageWidth / 2, y, { align: 'center' });
+        y += 30;
+        doc.setFontSize(16);
+        doc.text('ARTIST AGREEMENT', pageWidth / 2, y, { align: 'center' });
+        y += 40;
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        
+        // Auto-wrap the long text
+        const lines = doc.splitTextToSize(ARTIST_AGREEMENT_TEXT, textWidth);
+        for (const line of lines) {
+          if (y > doc.internal.pageSize.getHeight() - margin) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.text(line, margin, y);
+          y += 14;
+        }
+        
+        y += 40;
+        if (y > doc.internal.pageSize.getHeight() - 100) {
+          doc.addPage();
+          y = margin;
+        }
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('AGREEMENT SIGNATURE', margin, y);
+        y += 20;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Digital Signature: ${digitalSignature}`, margin, y);
+        y += 20;
+        doc.text(`Date & Time: ${new Date().toLocaleString()}`, margin, y);
+        y += 20;
+        doc.text(`IP Address: ${userIp}`, margin, y);
+        
+        const pdfBlob = doc.output('blob');
+        const pdfFile = new File([pdfBlob], `agreement-${Date.now()}.pdf`, { type: 'application/pdf' });
+        agreementPdfUrl = await uploadToS3Presigned(pdfFile);
+      } catch (pdfErr) {
+        console.error('Failed to generate or upload PDF', pdfErr);
       }
+
+      // 3. Upload Profile Photo directly to S3
+      let profilePhotoUrl = null;
+      if (profilePhoto) {
+        profilePhotoUrl = await uploadToS3Presigned(profilePhoto);
+      }
+
+      const examplesUrls: string[] = [];
+      for (const file of files) {
+        examplesUrls.push(await uploadToS3Presigned(file));
+      }
+
+      // 4. Submit artist application data as JSON
+      const applyPayload = {
+        fullName, email, phone, country, state, area, portfolioLink, bio, specialization,
+        agreementTimestamp: new Date().toISOString(),
+        agreementIp: userIp,
+        agreementVersion: ARTIST_AGREEMENT_VERSION,
+        profilePhotoUrl,
+        agreementPdfUrl,
+        examples: examplesUrls
+      };
 
       const applyRes = await fetch('/api/artist/apply', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(applyPayload)
       });
 
-      const applyData = await applyRes.json();
+      let applyData;
+      const applyText = await applyRes.text();
+      try { applyData = JSON.parse(applyText); } catch { applyData = { error: applyText }; }
+
       if (applyRes.ok) {
         window.location.href = '/artist/dashboard';
       } else {
-        setError(applyData.error || 'Failed to submit artist profile');
+        let errMsg = applyData?.error;
+        if (!errMsg || errMsg.trim() === '') {
+          errMsg = `HTTP ${applyRes.status} ${applyRes.statusText || 'Error'}`;
+        } else {
+          errMsg = `Failed to submit artist profile: ${errMsg}`;
+        }
+        console.error('API Error:', errMsg);
+        setError(errMsg.substring(0, 150));
       }
-    } catch (err) {
-      setError('An error occurred during verification');
+    } catch (err: any) {
+      console.error('Submit Error:', err);
+      setError('An error occurred: ' + (err.message || String(err)));
     } finally {
       setLoading(false);
     }
@@ -303,6 +425,28 @@ export default function ArtistSignUpPage() {
 
         {step === 'details' ? (
           <form onSubmit={handleSendOtp}>
+            {/* Profile Photo */}
+            <div className="profile-card" style={{ textAlign: 'center' }}>
+              <h3>Profile Photo</h3>
+              <div
+                onClick={() => profilePhotoRef.current?.click()}
+                style={{
+                  width: '120px', height: '120px', borderRadius: '50%', margin: '0 auto var(--space-md)',
+                  border: '3px dashed var(--color-border)', cursor: 'pointer', overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: profilePhotoPreview ? 'transparent' : 'var(--color-bg-light)',
+                }}
+              >
+                {profilePhotoPreview ? (
+                  <img src={profilePhotoPreview} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ fontSize: '32px' }}>📷</span>
+                )}
+              </div>
+              <p className="text-xs text-muted">Click to upload a profile photo<br/><small>(Images {'>'} 3MB will be automatically resized)</small></p>
+              <input ref={profilePhotoRef} type="file" accept="image/*" onChange={handleProfilePhotoChange} style={{ display: 'none' }} />
+            </div>
+
             {/* Personal & Contact Info */}
             <div className="profile-card">
               <h3>Personal & Contact Info</h3>
@@ -318,6 +462,20 @@ export default function ArtistSignUpPage() {
                 <div className="form-group">
                   <label>Phone Number</label>
                   <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone Number" />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
+                <div className="form-group">
+                  <label>Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="Min 6 characters" minLength={6} />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{showPassword ? 'Hide' : 'Show'}</button>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Confirm Password</label>
+                  <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Re-enter password" minLength={6} />
+                  {confirmPassword && password !== confirmPassword && <small style={{ color: 'var(--color-error)' }}>Passwords don&apos;t match</small>}
                 </div>
               </div>
             </div>
@@ -384,27 +542,31 @@ export default function ArtistSignUpPage() {
                 </div>
               ) : (
                 <div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
-                    {files.map((file, i) => (
-                      <div key={i} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: 'var(--space-sm) var(--space-md)',
-                        background: 'var(--color-bg-light)',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid var(--color-border-light)',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', minWidth: 0 }}>
-                          <span style={{ fontSize: '16px' }}>📄</span>
-                          <div style={{ minWidth: 0 }}>
-                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                            <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-text-secondary)' }}>{formatFileSize(file.size)}</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
+                    {files.map((file, i) => {
+                      const isImage = file.type.startsWith('image/');
+                      const thumbUrl = isImage ? URL.createObjectURL(file) : '';
+                      return (
+                        <div key={i} style={{
+                          position: 'relative',
+                          border: '1px solid var(--color-border-light)',
+                          borderRadius: 'var(--radius-sm)',
+                          overflow: 'hidden',
+                          background: 'var(--color-bg-light)',
+                        }}>
+                          {isImage ? (
+                            <img src={thumbUrl} alt={file.name} onClick={() => setPreviewImage(thumbUrl)} style={{ width: '100%', height: '100px', objectFit: 'cover', cursor: 'pointer' }} />
+                          ) : (
+                            <div style={{ height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>📄</div>
+                          )}
+                          <div style={{ padding: '4px 8px' }}>
+                            <p style={{ margin: 0, fontSize: '11px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                            <p style={{ margin: 0, fontSize: '10px', color: 'var(--color-text-secondary)' }}>{formatFileSize(file.size)}</p>
                           </div>
+                          <button type="button" onClick={() => removeFile(i)} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(255,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                         </div>
-                        <button type="button" onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', color: 'var(--color-error)', cursor: 'pointer', fontSize: '16px', padding: '4px 8px' }}>✕</button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <button
@@ -555,6 +717,42 @@ export default function ArtistSignUpPage() {
           </form>
         )}
       </div>
+
+      {/* Fullscreen Image Preview Modal */}
+      {previewImage && (
+        <div
+          onClick={() => setPreviewImage(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.9)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          <button
+            onClick={() => setPreviewImage(null)}
+            style={{
+              position: 'absolute', top: '20px', right: '20px',
+              background: 'rgba(255,255,255,0.2)', color: 'white',
+              border: 'none', borderRadius: '50%', width: '40px', height: '40px',
+              fontSize: '20px', cursor: 'pointer', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            ×
+          </button>
+          <img
+            src={previewImage}
+            alt="Full screen preview"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw', maxHeight: '90vh',
+              objectFit: 'contain', borderRadius: '8px',
+              cursor: 'default',
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

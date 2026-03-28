@@ -1,68 +1,64 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 
-export default function SignUpPage() {
-  const router = useRouter();
-  const { refreshUser } = useAuth();
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'details' | 'otp'>('details');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [step, setStep] = useState<'email' | 'reset'>('email');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) {
+    setLoading(true);
+    setError('');
+
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await res.json();
+    setLoading(false);
+
+    if (res.ok) {
+      setStep('reset');
+    } else {
+      setError(data.error);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    if (password.length < 6) {
+    if (newPassword.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
     setLoading(true);
     setError('');
 
-    const res = await fetch('/api/auth/signup', {
+    const res = await fetch('/api/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, otp, newPassword }),
     });
 
     const data = await res.json();
     setLoading(false);
 
     if (res.ok) {
-      setStep('otp');
-    } else {
-      setError(data.error);
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const res = await fetch('/api/auth/signup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, otp }),
-    });
-
-    const data = await res.json();
-    setLoading(false);
-
-    if (res.ok) {
-      await refreshUser();
-      router.push('/');
+      setSuccess('Password updated successfully! You can now sign in.');
     } else {
       setError(data.error);
     }
@@ -71,16 +67,24 @@ export default function SignUpPage() {
   return (
     <div className="page-content fade-in">
       <div className="form-card">
-        <h1>Create Account</h1>
+        <h1>Reset Password</h1>
         <p className="subtitle">
-          {step === 'details'
-            ? 'Enter your details to get started'
-            : `We sent a verification code to ${email}`}
+          {step === 'email'
+            ? 'Enter your email to receive a verification code'
+            : `Enter the code sent to ${email} and your new password`}
         </p>
 
         {error && <div className="alert alert-error">{error}</div>}
+        {success && (
+          <div className="alert alert-success">
+            {success}{' '}
+            <Link href="/auth/signin" style={{ color: 'var(--color-accent)', fontWeight: 600 }}>
+              Sign in →
+            </Link>
+          </div>
+        )}
 
-        {step === 'details' ? (
+        {!success && step === 'email' && (
           <form onSubmit={handleSendOtp}>
             <div className="form-group">
               <label htmlFor="email">Email Address</label>
@@ -93,14 +97,35 @@ export default function SignUpPage() {
                 required
               />
             </div>
+            <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
+              {loading ? <span className="spinner"></span> : 'Send Verification Code'}
+            </button>
+          </form>
+        )}
+
+        {!success && step === 'reset' && (
+          <form onSubmit={handleResetPassword}>
             <div className="form-group">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="otp">Verification Code</label>
+              <input
+                id="otp"
+                type="text"
+                value={otp}
+                onChange={e => setOtp(e.target.value)}
+                placeholder="6-digit code"
+                maxLength={6}
+                required
+                style={{ textAlign: 'center', fontSize: '20px', letterSpacing: '8px' }}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="newPassword">New Password</label>
               <div style={{ position: 'relative' }}>
                 <input
-                  id="password"
+                  id="newPassword"
                   type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
                   placeholder="Minimum 6 characters"
                   required
                   minLength={6}
@@ -119,7 +144,7 @@ export default function SignUpPage() {
               </div>
             </div>
             <div className="form-group">
-              <label htmlFor="confirmPassword">Confirm Password</label>
+              <label htmlFor="confirmPassword">Confirm New Password</label>
               <input
                 id="confirmPassword"
                 type={showPassword ? 'text' : 'password'}
@@ -129,45 +154,26 @@ export default function SignUpPage() {
                 required
                 minLength={6}
               />
-              {confirmPassword && password !== confirmPassword && (
+              {confirmPassword && newPassword !== confirmPassword && (
                 <small style={{ color: 'var(--color-error)' }}>Passwords do not match</small>
               )}
             </div>
             <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
-              {loading ? <span className="spinner"></span> : 'Send Verification Code'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOtp}>
-            <div className="form-group">
-              <label htmlFor="otp">Verification Code</label>
-              <input
-                id="otp"
-                type="text"
-                value={otp}
-                onChange={e => setOtp(e.target.value)}
-                placeholder="Enter 6-digit code"
-                maxLength={6}
-                required
-                style={{ textAlign: 'center', fontSize: '20px', letterSpacing: '8px' }}
-              />
-            </div>
-            <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
-              {loading ? <span className="spinner"></span> : 'Verify & Create Account'}
+              {loading ? <span className="spinner"></span> : 'Reset Password'}
             </button>
             <button
               type="button"
               className="btn btn-ghost btn-full"
-              onClick={() => { setStep('details'); setOtp(''); setError(''); }}
+              onClick={() => { setStep('email'); setOtp(''); setError(''); }}
               style={{ marginTop: 'var(--space-sm)' }}
             >
-              Back to Details
+              Change email
             </button>
           </form>
         )}
 
         <p className="text-center text-sm text-muted" style={{ marginTop: 'var(--space-xl)' }}>
-          Already have an account?{' '}
+          Remember your password?{' '}
           <Link href="/auth/signin" style={{ color: 'var(--color-accent)', fontWeight: 500 }}>
             Sign in
           </Link>

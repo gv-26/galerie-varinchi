@@ -14,6 +14,13 @@ export default function CheckoutPage() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
 
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('');
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponError, setCouponError] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState(0);
+
   if (!user) {
     return (
       <div className="page-content">
@@ -57,6 +64,43 @@ export default function CheckoutPage() {
     );
   }
 
+  const discountAmount = couponApplied ? Math.round(totalPrice * discountPercent / 100) : 0;
+  const finalTotal = totalPrice - discountAmount;
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true);
+    setCouponError('');
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponCode.trim().toUpperCase() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.discount) {
+        setDiscountPercent(data.discount);
+        setCouponApplied(true);
+        setCouponError('');
+      } else {
+        setCouponError(data.error || 'Invalid or expired coupon code');
+        setCouponApplied(false);
+        setDiscountPercent(0);
+      }
+    } catch {
+      setCouponError('Failed to validate coupon. Please try again.');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode('');
+    setCouponApplied(false);
+    setDiscountPercent(0);
+    setCouponError('');
+  };
+
   const handlePlaceOrder = async () => {
     setLoading(true);
     try {
@@ -72,6 +116,8 @@ export default function CheckoutPage() {
             frameColor: item.frameColor,
             price: item.price,
           })),
+          couponCode: couponApplied ? couponCode.trim().toUpperCase() : undefined,
+          discountAmount,
         }),
       });
 
@@ -107,10 +153,59 @@ export default function CheckoutPage() {
               <span style={{ fontWeight: 500 }}>₹{(item.price * item.quantity).toLocaleString()}</span>
             </div>
           ))}
-          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 'var(--space-md)', paddingTop: 'var(--space-md)', display: 'flex', justifyContent: 'space-between', fontWeight: 600, fontSize: '16px' }}>
-            <span>Total</span>
-            <span>₹{totalPrice.toLocaleString()}</span>
+          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 'var(--space-md)', paddingTop: 'var(--space-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: 'var(--space-xs)' }}>
+              <span>Subtotal</span>
+              <span>₹{totalPrice.toLocaleString()}</span>
+            </div>
+            {couponApplied && discountAmount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: 'var(--color-success)', marginBottom: 'var(--space-xs)' }}>
+                <span>Discount ({discountPercent}% off)</span>
+                <span>- ₹{discountAmount.toLocaleString()}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, fontSize: '16px', marginTop: 'var(--space-sm)' }}>
+              <span>Total</span>
+              <span>₹{finalTotal.toLocaleString()}</span>
+            </div>
           </div>
+        </div>
+
+        {/* Coupon Code */}
+        <div className="profile-card">
+          <h3>Coupon Code</h3>
+          {!couponApplied ? (
+            <div>
+              <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                <input
+                  type="text"
+                  placeholder="Enter coupon code"
+                  value={couponCode}
+                  onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponError(''); }}
+                  style={{ flex: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                  onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+                />
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponCode.trim()}
+                >
+                  {couponLoading ? <span className="spinner" style={{ width: '16px', height: '16px' }}></span> : 'Apply'}
+                </button>
+              </div>
+              {couponError && <p style={{ color: 'var(--color-error)', fontSize: '13px', marginTop: 'var(--space-xs)' }}>{couponError}</p>}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>✓ {couponCode}</span>
+                <span style={{ marginLeft: 'var(--space-sm)', fontSize: '13px', color: 'var(--color-success)' }}>
+                  {discountPercent}% discount applied
+                </span>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={handleRemoveCoupon}>Remove</button>
+            </div>
+          )}
         </div>
 
         <div className="profile-card">
@@ -137,7 +232,7 @@ export default function CheckoutPage() {
           disabled={loading}
           style={{ marginTop: 'var(--space-lg)' }}
         >
-          {loading ? <span className="spinner"></span> : `Place Order — ₹${totalPrice.toLocaleString()}`}
+          {loading ? <span className="spinner"></span> : `Place Order — ₹${finalTotal.toLocaleString()}`}
         </button>
       </div>
     </div>

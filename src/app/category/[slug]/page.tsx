@@ -65,6 +65,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
                       id={product.id}
                       title={product.title}
                       image={product.image}
+                      unitsAvailable={product.unitsAvailable}
                     />
                   ))}
                 </div>

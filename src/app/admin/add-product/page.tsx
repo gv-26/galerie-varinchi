@@ -26,6 +26,11 @@ interface Specification {
   options: SpecOption[];
 }
 
+interface Artist {
+  id: string;
+  fullName: string;
+}
+
 function AddProductContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -59,6 +64,10 @@ function AddProductContent() {
   const [hasUnits, setHasUnits] = useState(false);
   const [unitsAvailable, setUnitsAvailable] = useState('');
 
+  // Artists dropdown
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [artistProfileId, setArtistProfileId] = useState('');
+
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(data => {
       setCategories(data);
@@ -68,6 +77,10 @@ function AddProductContent() {
         if (data[0].subCategories.length > 0) setSubCategoryId(data[0].subCategories[0].id);
       }
     });
+    // Fetch approved artists
+    fetch('/api/admin/artists/list').then(r => r.json()).then(data => {
+      setArtists(data.artists || []);
+    }).catch(console.error);
   }, [requestId]);
 
   useEffect(() => {
@@ -238,6 +251,7 @@ function AddProductContent() {
       priceModifiers: JSON.stringify(finalPrices),
       unitsAvailable: hasUnits ? (parseInt(unitsAvailable) || 0) : null,
       requestId: requestId || undefined,
+      artistProfileId: artistProfileId || null,
     };
 
     try {
@@ -300,6 +314,19 @@ function AddProductContent() {
                     ))}
                   </select>
                 )}
+              </div>
+            </div>
+
+            <div className="profile-card">
+              <h3>Artist</h3>
+              <div className="form-group">
+                <label>Assign to Artist (optional)</label>
+                <select value={artistProfileId} onChange={e => setArtistProfileId(e.target.value)}>
+                  <option value="">— No artist —</option>
+                  {artists.map(a => (
+                    <option key={a.id} value={a.id}>{a.fullName}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

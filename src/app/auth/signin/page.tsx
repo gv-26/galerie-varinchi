@@ -9,12 +9,12 @@ export default function SignInPage() {
   const router = useRouter();
   const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'email' | 'otp'>('email');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -22,28 +22,7 @@ export default function SignInPage() {
     const res = await fetch('/api/auth/signin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-
-    const data = await res.json();
-    setLoading(false);
-
-    if (res.ok) {
-      setStep('otp');
-    } else {
-      setError(data.error);
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const res = await fetch('/api/auth/signin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp }),
+      body: JSON.stringify({ email, password }),
     });
 
     const data = await res.json();
@@ -61,59 +40,57 @@ export default function SignInPage() {
     <div className="page-content fade-in">
       <div className="form-card">
         <h1>Welcome Back</h1>
-        <p className="subtitle">
-          {step === 'email'
-            ? 'Enter your email to sign in'
-            : `We sent a code to ${email}`}
-        </p>
+        <p className="subtitle">Sign in to your account</p>
 
         {error && <div className="alert alert-error">{error}</div>}
 
-        {step === 'email' ? (
-          <form onSubmit={handleSendOtp}>
-            <div className="form-group">
-              <label htmlFor="email">Email Address</label>
+        <form onSubmit={handleSignIn}>
+          <div className="form-group">
+            <label htmlFor="email">Email Address</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="password">Password</label>
+            <div style={{ position: 'relative' }}>
               <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="your@email.com"
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter your password"
                 required
+                minLength={6}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px',
+                  color: 'var(--color-text-secondary)'
+                }}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
             </div>
-            <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
-              {loading ? <span className="spinner"></span> : 'Send Verification Code'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOtp}>
-            <div className="form-group">
-              <label htmlFor="otp">Verification Code</label>
-              <input
-                id="otp"
-                type="text"
-                value={otp}
-                onChange={e => setOtp(e.target.value)}
-                placeholder="Enter 6-digit code"
-                maxLength={6}
-                required
-                style={{ textAlign: 'center', fontSize: '20px', letterSpacing: '8px' }}
-              />
-            </div>
-            <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
-              {loading ? <span className="spinner"></span> : 'Verify & Sign In'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-full"
-              onClick={() => { setStep('email'); setOtp(''); setError(''); }}
-              style={{ marginTop: 'var(--space-sm)' }}
-            >
-              Change email
-            </button>
-          </form>
-        )}
+          </div>
+          <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
+            {loading ? <span className="spinner"></span> : 'Sign In'}
+          </button>
+        </form>
+
+        <div style={{ textAlign: 'center', marginTop: 'var(--space-md)' }}>
+          <Link href="/auth/forgot-password" style={{ color: 'var(--color-accent)', fontSize: '13px', fontWeight: 500 }}>
+            Forgot Password?
+          </Link>
+        </div>
 
         <p className="text-center text-sm text-muted" style={{ marginTop: 'var(--space-xl)' }}>
           Don&apos;t have an account?{' '}
