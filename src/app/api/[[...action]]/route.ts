@@ -812,6 +812,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await db.insert(schema.orderItem).values(items);
       await sendOrderConfirmationEmail(user.email, order.id, order.totalAmount);
       
+      // Every new order is already paid (payment confirmed at checkout).
+      // Fire commission engine immediately — fire-and-forget so it doesn't block the response.
+      processCommissionForOrder(order.id).catch(err =>
+        console.error('Commission processing error for order', order.id, err)
+      );
+      
       return NextResponse.json({ order });
     }
 
@@ -1044,13 +1050,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       // Update Order status
       if (action[0] === 'orders' && action[1]) {
         const [o] = await db.update(schema.order).set({ status: body.status }).where(eq(schema.order.id, action[1])).returning();
-        
-        // Trigger commission engine when order is marked PAID
-        if (body.status === 'PAID') {
-          processCommissionForOrder(action[1]).catch(err => 
-            console.error('Commission processing error for order', action[1], err)
-          );
-        }
 
         // Handle refund — cancel pending ledger entries and restore wallet
         if (body.status === 'REFUNDED' || body.status === 'CANCELLED') {
