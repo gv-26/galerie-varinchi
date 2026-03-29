@@ -84,7 +84,7 @@ export default function ProductCommissionPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg-light)' }}>
-                    {['Date', 'Sale Price', 'Your Cut', 'Commission Type', 'Status'].map(h => (
+                    {['Date', 'Sale Price', 'Your Cut', 'Commission Type', 'Payout Status'].map(h => (
                       <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-secondary)', fontSize: '11px', letterSpacing: '0.5px' }}>{h}</th>
                     ))}
                   </tr>
@@ -110,7 +110,7 @@ export default function ProductCommissionPage() {
                           background: l.status === 'COMPLETED' ? '#edf7ed' : l.status === 'CANCELLED' ? '#fdecea' : '#fff8e1',
                           color: l.status === 'COMPLETED' ? '#2e7d32' : l.status === 'CANCELLED' ? '#c62828' : '#f57f17'
                         }}>
-                          {l.status === 'COMPLETED' ? 'Released to Wallet' : l.status === 'CANCELLED' ? 'Cancelled (Refund)' : 'Pending (5-day hold)'}
+                          {l.status === 'COMPLETED' ? 'Released to Wallet' : l.status === 'CANCELLED' ? 'Cancelled (Refund)' : 'Pending Hold (5 days)'}
                         </span>
                       </td>
                     </tr>

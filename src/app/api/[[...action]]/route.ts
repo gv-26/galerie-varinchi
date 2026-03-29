@@ -276,9 +276,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       if (action[1] === 'commissions') {
         if (action[2] === 'stats') {
           // Platform-wide financial totals
-          const [revenueRes] = await db.select({ total: sql<number>`COALESCE(SUM("totalAmount"), 0)` }).from(schema.order).where(eq(schema.order.status, 'PAID'));
-          const [commissionsRes] = await db.select({ total: sql<number>`COALESCE(SUM("artistShare"), 0)` }).from(schema.commissionLedger);
-          const [salesRes] = await db.select({ count: sql<number>`count(*)` }).from(schema.commissionLedger);
+          const [revenueRes] = await db.select({ total: sql<number>`COALESCE(SUM("totalAmount"), 0)` })
+            .from(schema.order)
+            .where(inArray(schema.order.status, ['NEW', 'PROCESSING', 'COMPLETED']));
+          const [commissionsRes] = await db.select({ total: sql<number>`COALESCE(SUM("artistShare"), 0)` })
+            .from(schema.commissionLedger)
+            .where(inArray(schema.commissionLedger.status, ['PENDING', 'COMPLETED']));
+          const [salesRes] = await db.select({ count: sql<number>`count(*)` })
+            .from(schema.commissionLedger)
+            .where(inArray(schema.commissionLedger.status, ['PENDING', 'COMPLETED']));
           return NextResponse.json({
             totalRevenue: Number(revenueRes.total),
             totalCommissions: Number(commissionsRes.total),

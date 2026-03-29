@@ -119,10 +119,10 @@ export default function AdminCommissionsPage() {
               />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
-              <label>Status</label>
+              <label>Payout Status</label>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                 <option value="">All</option>
-                <option value="PENDING">Pending</option>
+                <option value="PENDING">Pending Hold (5 days)</option>
                 <option value="COMPLETED">Released</option>
                 <option value="CANCELLED">Cancelled</option>
               </select>
@@ -145,7 +145,7 @@ export default function AdminCommissionsPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg-light)' }}>
-                    {['Date', 'Artist', 'Product', 'Sale Price', 'Artist Share', 'Type', 'Status'].map(h => (
+                    {['Date', 'Artist', 'Product', 'Sale Price', 'Artist Share', 'Type', 'Payout Status'].map(h => (
                       <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-secondary)', fontSize: '11px', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -179,7 +179,7 @@ export default function AdminCommissionsPage() {
                           background: l.status === 'COMPLETED' ? '#edf7ed' : l.status === 'CANCELLED' ? '#fdecea' : '#fff8e1',
                           color: l.status === 'COMPLETED' ? '#2e7d32' : l.status === 'CANCELLED' ? '#c62828' : '#f57f17'
                         }}>
-                          {l.status === 'COMPLETED' ? 'Released' : l.status === 'CANCELLED' ? 'Cancelled' : 'Pending'}
+                          {l.status === 'COMPLETED' ? 'Released' : l.status === 'CANCELLED' ? 'Cancelled' : 'Pending Hold (5d)'}
                         </span>
                       </td>
                     </tr>

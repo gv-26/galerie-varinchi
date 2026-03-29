@@ -168,7 +168,7 @@ export default function ArtistDashboardPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ background: 'var(--color-bg-light)' }}>
-                      {['Product', 'Sale Price', 'Your Cut', 'Type', 'Status', 'Date'].map(h => (
+                      {['Product', 'Sale Price', 'Your Cut', 'Type', 'Payout Status', 'Date'].map(h => (
                         <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-secondary)', fontSize: '11px', letterSpacing: '0.5px' }}>{h}</th>
                       ))}
                     </tr>
@@ -198,7 +198,7 @@ export default function ArtistDashboardPage() {
                             background: l.status === 'COMPLETED' ? '#edf7ed' : l.status === 'CANCELLED' ? '#fdecea' : '#fff8e1',
                             color: l.status === 'COMPLETED' ? '#2e7d32' : l.status === 'CANCELLED' ? '#c62828' : '#f57f17'
                           }}>
-                            {l.status === 'COMPLETED' ? 'Released' : l.status === 'CANCELLED' ? 'Cancelled' : 'Pending (5d)'}
+                            {l.status === 'COMPLETED' ? 'Released' : l.status === 'CANCELLED' ? 'Cancelled' : 'Pending Hold (5d)'}
                           </span>
                         </td>
                         <td style={{ padding: '10px 16px', color: 'var(--color-text-secondary)' }}>{new Date(l.createdAt).toLocaleDateString()}</td>
