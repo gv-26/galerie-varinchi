@@ -17,6 +17,7 @@ export default function Navbar({ categories }: { categories: Category[] }) {
   const { totalItems: wishlistCount } = useWishlist();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isArtist, setIsArtist] = useState(false);
+  const [pendingAdminCount, setPendingAdminCount] = useState(0);
   const [localCategories, setLocalCategories] = useState<Category[]>(categories || []);
 
   useEffect(() => {
@@ -42,6 +43,15 @@ export default function Navbar({ categories }: { categories: Category[] }) {
         .catch(() => setIsArtist(false));
     } else {
       setIsArtist(false);
+    }
+    
+    if (user && user.isAdmin) {
+      fetch('/api/admin/artists/stats')
+        .then(res => res.json())
+        .then(data => {
+          setPendingAdminCount((data.pendingArtists || 0) + (data.pendingArtworks || 0));
+        })
+        .catch(console.error);
     }
   }, [user]);
 
@@ -82,8 +92,9 @@ export default function Navbar({ categories }: { categories: Category[] }) {
           </Link>
 
           {user && user.isAdmin && (
-            <Link href="/admin" className="nav-admin-link" style={{ color: 'var(--color-accent)', fontWeight: 500, fontSize: '11px' }}>
+            <Link href="/admin" className="nav-admin-link" style={{ color: 'var(--color-accent)', fontWeight: 500, fontSize: '11px', position: 'relative' }}>
               Admin Dashboard
+              {pendingAdminCount > 0 && <span className="nav-badge" style={{ position: 'absolute', top: '-6px', right: '-12px', fontSize: '9px', padding: '2px 4px', background: 'var(--color-error)' }}>{pendingAdminCount}</span>}
             </Link>
           )}
 

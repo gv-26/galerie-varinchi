@@ -41,6 +41,16 @@ export default $config({
       },
     });
 
+    // 3b. Daily cron to release matured artist commissions (5-day hold)
+    new sst.aws.Cron("WalletReleaseCron", {
+      schedule: "rate(1 day)",
+      job: {
+        handler: "src/functions/wallet-cron.handler",
+        link: [databaseUrl],
+        environment: { DATABASE_URL: databaseUrl.value },
+      },
+    });
+
     // 4. Create the Router/CDN
     const router = new sst.aws.Router("MyWebCdn", {
       domain: isProd ? {

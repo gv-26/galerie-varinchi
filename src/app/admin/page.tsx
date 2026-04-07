@@ -140,6 +140,14 @@ export default function AdminPage() {
               <span className="btn btn-secondary btn-sm">Manage Coupons →</span>
             </div>
           </Link>
+
+          <Link href="/admin/commissions" className="profile-card" style={{ textDecoration: 'none', transition: 'box-shadow 0.2s' }}>
+            <h3 style={{ marginBottom: 'var(--space-sm)' }}>Commission Audit</h3>
+            <p className="text-sm text-muted">View platform revenue, artist commissions, and audit individual sales</p>
+            <div style={{ marginTop: 'var(--space-md)' }}>
+              <span className="btn btn-primary btn-sm">View Commissions →</span>
+            </div>
+          </Link>
         </div>
       </div>
     </div>

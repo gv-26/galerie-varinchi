@@ -226,10 +226,16 @@ export default function CheckoutPage() {
           </p>
         </div>
 
+        {(!user.address) && (
+          <div className="alert alert-error" style={{ marginTop: 'var(--space-md)' }}>
+            Please add a delivery address to your profile before placing an order.
+          </div>
+        )}
+
         <button
           className="btn btn-primary btn-full"
           onClick={handlePlaceOrder}
-          disabled={loading}
+          disabled={loading || !user.address}
           style={{ marginTop: 'var(--space-lg)' }}
         >
           {loading ? <span className="spinner"></span> : `Place Order — ₹${finalTotal.toLocaleString()}`}

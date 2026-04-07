@@ -52,6 +52,9 @@ export default function SubmitArtPage() {
   // Dynamic Specifications
   const [specs, setSpecs] = useState<Spec[]>([]);
 
+  // Form ref for scrolling
+  const formRef = useRef<HTMLDivElement>(null);
+  
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,6 +147,14 @@ export default function SubmitArtPage() {
       setError('Please fill in title, description, and base price');
       return;
     }
+    const currentYear = new Date().getFullYear();
+    if (parseInt(yearCreated) > currentYear) {
+      const msg = `Year Created cannot be in the future (max ${currentYear})`;
+      setError(msg);
+      setLoading(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -188,6 +199,7 @@ export default function SubmitArtPage() {
       }
     } catch (err: any) {
       setError('An error occurred: ' + (err?.message || String(err)));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setLoading(false);
     }
@@ -217,8 +229,13 @@ export default function SubmitArtPage() {
 
         <h1 className="heading-serif" style={{ marginBottom: 'var(--space-xl)' }}>Submit New Artwork</h1>
 
-        {success && <div className="alert alert-success">Artwork submitted for review successfully! Redirecting...</div>}
-        {error && <div className="alert alert-error">{error}</div>}
+        {success && <div className="alert alert-success" style={{ marginBottom: 'var(--space-md)' }}>Artwork submitted for review successfully! Redirecting...</div>}
+        {error && (
+          <div className="alert alert-error" style={{ marginBottom: 'var(--space-md)', fontWeight: 600, border: '2px solid red' }}>
+            <span style={{ marginRight: '8px' }}>⚠️</span>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="profile-card">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
@@ -228,7 +245,7 @@ export default function SubmitArtPage() {
             </div>
             <div className="form-group">
               <label>Year Created *</label>
-              <input type="text" value={yearCreated} onChange={e => setYearCreated(e.target.value)} placeholder="e.g. 2025" required />
+              <input type="number" max={new Date().getFullYear()} value={yearCreated} onChange={e => setYearCreated(e.target.value)} placeholder="e.g. 2025" required />
             </div>
           </div>
 

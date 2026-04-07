@@ -4,11 +4,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, ne, desc, sql, inArray, lt, gte } from 'drizzle-orm';
 import { createToken, getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth';
 import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { processCommissionForOrder } from '@/lib/commission';
 import crypto from 'crypto';
 
 
@@ -129,7 +130,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         });
         return p ? NextResponse.json({ product: parseProduct(p) }) : NextResponse.json({ error: 'Not found' }, { status: 404 });
       }
+      const includeInactive = searchParams.get('includeInactive') === 'true';
       const list = await db.query.product.findMany({ 
+        where: includeInactive 
+          ? ne(schema.product.status, 'deleted') 
+          : eq(schema.product.status, 'active'),
         orderBy: [desc(schema.product.createdAt)], 
         with: { subCategory: { with: { category: true } }, artistProfile: true } 
       });
@@ -260,6 +265,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           return req ? NextResponse.json({ request: req }) : NextResponse.json({ error: 'Not found' }, { status: 404 });
         }
         const list = await db.query.artRequest.findMany({ 
+          where: eq(schema.artRequest.status, 'PENDING'),
           with: { artistProfile: true, category: true, subCategory: true } 
         });
         return NextResponse.json({ requests: list });
@@ -271,18 +277,101 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         return NextResponse.json({ coupons: list });
       }
       
-      // Admin: All Testimonials (including hidden)
-      if (action[1] === 'testimonials') {
-        const list = await db.query.testimonial.findMany({
-          with: { user: { columns: { name: true } }, product: { columns: { title: true } } },
-          orderBy: [desc(schema.testimonial.createdAt)]
+      // Admin: Commission audit
+      if (action[1] === 'commissions') {
+        if (action[2] === 'stats') {
+          // Platform-wide financial totals
+          const [revenueRes] = await db.select({ total: sql<number>`COALESCE(SUM("totalAmount"), 0)` })
+            .from(schema.order)
+            .where(inArray(schema.order.status, ['NEW', 'PROCESSING', 'COMPLETED']));
+          const [commissionsRes] = await db.select({ total: sql<number>`COALESCE(SUM("artistShare"), 0)` })
+            .from(schema.commissionLedger)
+            .where(inArray(schema.commissionLedger.status, ['PENDING', 'COMPLETED']));
+          const [salesRes] = await db.select({ count: sql<number>`count(*)` })
+            .from(schema.commissionLedger)
+            .where(inArray(schema.commissionLedger.status, ['PENDING', 'COMPLETED']));
+          return NextResponse.json({
+            totalRevenue: Number(revenueRes.total),
+            totalCommissions: Number(commissionsRes.total),
+            totalSales: Number(salesRes.count)
+          });
+        }
+
+        // Filtered ledger list — ?artist=name&product=name
+        const artistFilter = searchParams.get('artist')?.toLowerCase() || '';
+        const productFilter = searchParams.get('product')?.toLowerCase() || '';
+
+        const allLedgers = await db.query.commissionLedger.findMany({
+          orderBy: [desc(schema.commissionLedger.createdAt)],
+          with: {
+            artistProfile: { columns: { fullName: true, email: true } },
+            product: { columns: { title: true, basePrice: true } }
+          }
         });
-        return NextResponse.json(list);
+
+        const filtered = allLedgers.filter(l => {
+          const artistMatch = !artistFilter || l.artistProfile?.fullName?.toLowerCase().includes(artistFilter);
+          const productMatch = !productFilter || l.product?.title?.toLowerCase().includes(productFilter);
+          return artistMatch && productMatch;
+        });
+
+        return NextResponse.json({ ledgers: filtered });
+      }
+
+      // Admin: Maintenance
+      if (action[1] === 'maintenance') {
+        if (action[2] === 'repair-artist-links') {
+          // 1. Repair missing artistProfileId on Products
+          const orphanedProducts = await db.query.product.findMany({
+            where: sql`"artistProfileId" IS NULL`
+          });
+          
+          let repairedCount = 0;
+          for (const p of orphanedProducts) {
+             const req = await db.query.artRequest.findFirst({
+               where: eq(schema.artRequest.title, p.title)
+             });
+             if (req) {
+               await db.update(schema.product)
+                 .set({ artistProfileId: req.artistId })
+                 .where(eq(schema.product.id, p.id));
+                 
+               repairedCount++;
+             }
+          }
+
+          // 2. Reprocess commissions for orders missing ledger entries
+          const allOrders = await db.query.order.findMany({
+            where: inArray(schema.order.status, ['NEW', 'PROCESSING', 'COMPLETED', 'DELIVERED']),
+            with: { orderItems: true }
+          });
+          
+          let processedOrders = 0;
+          for (const o of allOrders) {
+            let needsProcessing = false;
+            for (const item of o.orderItems) {
+              const hasLedger = await db.query.commissionLedger.findFirst({
+                where: eq(schema.commissionLedger.orderItemId, item.id)
+              });
+              if (!hasLedger) { needsProcessing = true; break; }
+            }
+            if (needsProcessing) {
+              await processCommissionForOrder(o.id);
+              processedOrders++;
+            }
+          }
+
+          return NextResponse.json({ 
+            success: true, 
+            repairedProductsCount: repairedCount,
+            reprocessedOrdersCount: processedOrders 
+          });
+        }
       }
     }
 
     // Public/Admin: Artist Profile by ID
-    if (action[0] === 'artist' && action[1] && action[1] !== 'profile' && action[1] !== 'art-requests' && action[1] !== 'apply') {
+    if (action[0] === 'artist' && action[1] && !['profile', 'art-requests', 'apply', 'wallet'].includes(action[1])) {
       const condition = user?.isAdmin 
         ? eq(schema.artistProfile.id, action[1])
         : and(eq(schema.artistProfile.id, action[1]), eq(schema.artistProfile.status, 'APPROVED'));
@@ -299,6 +388,50 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
        if (action[1] === 'art-requests' && profile) {
          const requests = await db.query.artRequest.findMany({ where: eq(schema.artRequest.artistId, profile.id) });
          return NextResponse.json({ requests });
+       }
+
+       // Artist Wallet — overview
+       if (action[1] === 'wallet' && profile) {
+         if (action[2] === 'product' && action[3]) {
+           // Per-product commission drill-down
+           const ledgers = await db.query.commissionLedger.findMany({
+             where: and(
+               eq(schema.commissionLedger.artistId, profile.id),
+               eq(schema.commissionLedger.productId, action[3])
+             ),
+             orderBy: [desc(schema.commissionLedger.createdAt)]
+           });
+           const product = await db.query.product.findFirst({ where: eq(schema.product.id, action[3]) });
+           const totalEarned = ledgers.reduce((s, l) => s + l.artistShare, 0);
+           const totalSales = ledgers.length;
+           return NextResponse.json({ product, ledgers, totalEarned, totalSales });
+         }
+
+         // Main wallet overview
+         const wallet = await db.query.artistWallet.findFirst({
+           where: eq(schema.artistWallet.artistId, profile.id)
+         });
+         const ledgers = await db.query.commissionLedger.findMany({
+           where: eq(schema.commissionLedger.artistId, profile.id),
+           orderBy: [desc(schema.commissionLedger.createdAt)],
+           with: { 
+             product: { columns: { id: true, title: true, basePrice: true, totalCommissionPaid: true } },
+             orderItem: { with: { order: { columns: { id: true, createdAt: true, status: true } } } }
+           }
+         });
+         
+         // Lifetime Earnings — sum of all non-cancelled artist shares
+         const totalEarned = ledgers
+           .filter(l => l.status !== 'CANCELLED')
+           .reduce((sum, current) => sum + (current.artistShare || 0), 0);
+         
+         const totalSales = ledgers.length;
+         return NextResponse.json({ 
+           wallet: wallet ?? { availableBalance: 0, pendingBalance: 0 }, 
+           ledgers, 
+           totalEarned: Math.round(totalEarned * 100) / 100, 
+           totalSales 
+         });
        }
     }
 
@@ -432,6 +565,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           detail: 'Failed to insert ArtistProfile. Make sure you don\'t already have a pending application.'
         }, { status: 500 });
       }
+    }
+    // Bank details (artist saves after approval)
+    if (action[0] === 'artist' && action[1] === 'wallet' && action[2] === 'bank' && user) {
+      const profile = await db.query.artistProfile.findFirst({ where: eq(schema.artistProfile.userId, user.id) });
+      if (!profile) return NextResponse.json({ error: 'Artist profile not found' }, { status: 404 });
+      const { bankName, accountNumber, ifscCode, bankBranch } = body;
+      const [updated] = await db.update(schema.artistProfile)
+        .set({ bankName, accountNumber, ifscCode, bankBranch, updatedAt: new Date().toISOString() })
+        .where(eq(schema.artistProfile.id, profile.id))
+        .returning();
+      return NextResponse.json({ profile: updated });
     }
 
     // 3. Art request (Artwork Submission - Now JSON-based)
@@ -693,6 +837,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (action[0] === 'orders' && user) {
+      // 1. Verify stock capacity
+      for (const item of body.items) {
+        const p = await db.query.product.findFirst({ where: eq(schema.product.id, item.productId) });
+        if (!p) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+        if (p.unitsAvailable !== null && p.unitsAvailable < item.quantity) {
+          return NextResponse.json({ error: `Not enough stock for ${p.title}. Only ${p.unitsAvailable} left.` }, { status: 400 });
+        }
+      }
+
       // Calculate discount from coupon if provided
       let couponId: string | null = null;
       let discountAmount: number | null = null;
@@ -732,7 +885,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }));
       
       await db.insert(schema.orderItem).values(items);
+
+      // Decrement stock and hide out-of-stock items
+      for (const item of body.items) {
+        const p = await db.query.product.findFirst({ where: eq(schema.product.id, item.productId) });
+        if (p && p.unitsAvailable !== null) {
+          const newUnits = p.unitsAvailable - item.quantity;
+          await db.update(schema.product)
+            .set({ 
+              unitsAvailable: Math.max(0, newUnits),
+              status: newUnits <= 0 ? 'inactive' : p.status 
+            })
+            .where(eq(schema.product.id, item.productId));
+        }
+      }
+
       await sendOrderConfirmationEmail(user.email, order.id, order.totalAmount);
+      
+      // Every new order is already paid (payment confirmed at checkout).
+      // We MUST await this in serverless/Lambda environments to ensure it completes.
+      try {
+        await processCommissionForOrder(order.id);
+      } catch (err) {
+        console.error('Commission processing error for order', order.id, err);
+      }
       
       return NextResponse.json({ order });
     }
@@ -754,19 +930,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           .returning();
         
         if (body.action === 'APPROVE') {
-           const imageUrls = getImages(artReq.images);
-           await db.insert(schema.product).values({
-             id: crypto.randomUUID(),
-             title: artReq.title,
-             description: artReq.description,
-             basePrice: artReq.price,
-             image: imageUrls[0] || '/images/placeholder.jpg',
-             images: artReq.images,
-             specifications: artReq.specifications,
-             unitsAvailable: artReq.quantity,
-             status: 'active',
-             subCategoryId: artReq.subCategoryId,
-           });
+            const imageUrls = getImages(artReq.images);
+            const productId = crypto.randomUUID();
+            await db.insert(schema.product).values({
+              id: productId,
+              title: artReq.title,
+              description: artReq.description,
+              basePrice: artReq.price,
+              image: imageUrls[0] || '/images/placeholder.jpg',
+              images: artReq.images,
+              specifications: artReq.specifications,
+              unitsAvailable: artReq.quantity,
+              status: 'active',
+              subCategoryId: artReq.subCategoryId,
+              artistProfileId: artReq.artistId, // Link the artist!
+            });
+            await db.update(schema.artRequest)
+              .set({ status: 'APPROVED' }) // Just update the status
+              .where(eq(schema.artRequest.id, artReq.id));
         }
         
         revalidatePath('/admin/content/products');
@@ -819,13 +1000,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (action[0] === 'products' && user?.isAdmin) {
+      const { requestId, ...productData } = body;
       const [p] = await db.insert(schema.product).values({ 
-        ...body, 
+        ...productData, 
         id: crypto.randomUUID(), 
         status: 'active',
-        basePrice: body.price || body.basePrice || 0,
-        image: body.image || (getImages(body.images)[0] || '/images/placeholder.jpg')
+        basePrice: productData.price || productData.basePrice || 0,
+        image: productData.image || (getImages(productData.images)[0] || '/images/placeholder.jpg'),
+        artistProfileId: productData.artistProfileId || null,
       }).returning();
+      
+      if (requestId) {
+        await db.update(schema.artRequest)
+          .set({ status: 'APPROVED' })
+          .where(eq(schema.artRequest.id, requestId));
+      }
       
       revalidatePath('/admin/content/products');
       revalidatePath('/category', 'layout');
@@ -966,6 +1155,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       // Update Order status
       if (action[0] === 'orders' && action[1]) {
         const [o] = await db.update(schema.order).set({ status: body.status }).where(eq(schema.order.id, action[1])).returning();
+
+        // Handle refund — cancel pending ledger entries and restore wallet
+        if (body.status === 'REFUNDED' || body.status === 'CANCELLED') {
+          const pendingLedgers = await db.query.commissionLedger.findMany({
+            where: and(
+              eq(schema.commissionLedger.status, 'PENDING'),
+              // find ledgers for items in this order
+              inArray(
+                schema.commissionLedger.orderItemId,
+                (await db.query.orderItem.findMany({ where: eq(schema.orderItem.orderId, action[1]) })).map(i => i.id)
+              )
+            )
+          });
+          for (const ledger of pendingLedgers) {
+            await db.update(schema.commissionLedger).set({ status: 'CANCELLED' }).where(eq(schema.commissionLedger.id, ledger.id));
+            await db.update(schema.artistWallet)
+              .set({ pendingBalance: sql`GREATEST(0, \"ArtistWallet\".\"pendingBalance\" - ${ledger.artistShare})`, updatedAt: new Date().toISOString() })
+              .where(eq(schema.artistWallet.artistId, ledger.artistId));
+            // Reverse the product totalCommissionPaid
+            await db.update(schema.product)
+              .set({ totalCommissionPaid: sql`GREATEST(0, \"Product\".\"totalCommissionPaid\" - ${ledger.artistShare})` })
+              .where(eq(schema.product.id, ledger.productId));
+          }
+        }
+
         return NextResponse.json({ order: o });
       }
     }
@@ -1022,6 +1236,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     // Admin: Delete coupon
     if (action[0] === 'admin' && action[1] === 'coupons' && action[2] && user?.isAdmin) {
       await db.delete(schema.coupon).where(eq(schema.coupon.id, action[2]));
+      return NextResponse.json({ message: 'Removed' });
+    }
+
+    // Admin: Delete product
+    if (action[0] === 'admin' && action[1] === 'products' && action[2] && user?.isAdmin) {
+      await db.delete(schema.product).where(eq(schema.product.id, action[2]));
+      revalidatePath('/admin/content/products');
+      revalidatePath('/');
       return NextResponse.json({ message: 'Removed' });
     }
     return NextResponse.json({ error: 'Not Found' }, { status: 404 });
