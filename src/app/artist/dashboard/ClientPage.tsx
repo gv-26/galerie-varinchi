@@ -70,7 +70,7 @@ export default function ArtistDashboardPage() {
   };
 
   const fetchWallet = () => {
-    fetch('/api/artist/wallet')
+    fetch(`/api/artist/wallet?t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
         setWallet(data.wallet);

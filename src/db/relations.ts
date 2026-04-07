@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm/relations";
+import { relations } from "drizzle-orm";
 import { category, subCategory, product, user, cartItem, wishlistItem, order, orderItem, artistProfile, artRequest, session, testimonial, coupon, artistWallet, commissionLedger } from "./schema";
 
 export const subCategoryRelations = relations(subCategory, ({one, many}) => ({
@@ -151,5 +151,9 @@ export const commissionLedgerRelations = relations(commissionLedger, ({one}) => 
 	product: one(product, {
 		fields: [commissionLedger.productId],
 		references: [product.id]
+	}),
+	orderItem: one(orderItem, {
+		fields: [commissionLedger.orderItemId],
+		references: [orderItem.id]
 	}),
 }));

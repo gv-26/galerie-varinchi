@@ -86,7 +86,12 @@ export async function processCommissionForOrder(orderId: string): Promise<void> 
 
   for (const item of orderItems) {
     const product = item.product;
-    if (!product?.artistProfileId || !product.artistProfile) continue; // safety guard
+    if (!product?.artistProfileId || !product.artistProfile) {
+      console.warn(`[COMMISSION] Skipping item ${item.id} (Product: ${product?.title || 'Unknown'})`);
+      console.warn(` - product.artistProfileId: ${product?.artistProfileId}`);
+      console.warn(` - product.artistProfile: ${product?.artistProfile ? 'Exists' : 'MISSING (Relation failed)'}`);
+      continue;
+    }
 
     const { artistShare, commissionType, newTotalCommissionPaid } = calculateArtistPayout(
       item.price,

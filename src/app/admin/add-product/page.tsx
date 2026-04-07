@@ -113,6 +113,10 @@ function AddProductContent() {
 
           const parsedImages = JSON.parse(req.images || '[]');
           setImages(parsedImages);
+          
+          if (req.artistId) {
+            setArtistProfileId(req.artistId);
+          }
         }
       });
   }, [requestId, categories]);

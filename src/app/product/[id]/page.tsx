@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
@@ -41,6 +42,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function ProductPage() {
+  const router = useRouter();
   const { id } = useParams();
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isWishlisted } = useWishlist();
@@ -186,6 +188,16 @@ export default function ProductPage() {
   return (
     <div className="page-content fade-in">
       <div className="container">
+        <div style={{ marginBottom: 'var(--space-md)' }}>
+          <button 
+            type="button" 
+            onClick={() => router.back()} 
+            className="text-sm text-muted" 
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            ← Back
+          </button>
+        </div>
         <div className="product-detail">
           <div className="product-image-main">
             <img src={product.image} alt={product.title} />
@@ -198,9 +210,9 @@ export default function ProductPage() {
             {(product as any).artistProfile && (
               <p className="text-sm" style={{ marginBottom: 'var(--space-sm)' }}>
                 By{' '}
-                <a href={`/artist/${(product as any).artistProfile.id}`} style={{ color: 'var(--color-accent)', fontWeight: 500 }}>
+                <Link href={`/artist/${(product as any).artistProfile.id}`} style={{ color: 'var(--color-accent)', fontWeight: 500 }}>
                   {(product as any).artistProfile.fullName}
-                </a>
+                </Link>
               </p>
             )}
             <h1>{product.title}</h1>

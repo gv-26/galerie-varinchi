@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 
@@ -21,6 +21,7 @@ interface ArtistProfile {
 }
 
 export default function ArtistProfilePage() {
+  const router = useRouter();
   const { id } = useParams();
   const [artist, setArtist] = useState<ArtistProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,13 +55,19 @@ export default function ArtistProfilePage() {
     <div className="page-content fade-in">
       <div className="container" style={{ maxWidth: '800px' }}>
         <div style={{ marginBottom: 'var(--space-md)' }}>
-          <Link href="/" className="text-sm text-muted">← Back to Gallery</Link>
+          <button 
+            onClick={() => router.back()} 
+            className="text-sm text-muted"
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            ← Back
+          </button>
         </div>
 
         <div className="profile-card" style={{ textAlign: 'center', padding: 'var(--space-xl)' }}>
           {artist.profilePhoto ? (
             <img
-              src={artist.profilePhoto}
+              src={artist.profilePhoto.startsWith('http') || artist.profilePhoto.startsWith('/') ? artist.profilePhoto : `/${artist.profilePhoto}`}
               alt={artist.fullName}
               style={{
                 width: '120px', height: '120px', borderRadius: '50%',
