@@ -33,7 +33,9 @@ interface PriceBreakdown {
   laborCharge: number;
   settingCharge: number;
   polishCharge: number;
-  framingCost: number;
+  framingSubtotal: number;       // before partner margin
+  framingPartnerMargin: number;  // 15% of framingSubtotal
+  framingCost: number;           // framingSubtotal + partner margin
   addons: number;
   baseCost: number;
   priceBeforeGST: number;
@@ -73,7 +75,9 @@ function calculateSpecPrice(
   const settingCharge = 300;
   const surfaceArea = (heightFt * woodWidth * 2) + (widthFt * woodWidth * 2);
   const polishCharge = surfaceArea * 300;
-  const framingCost = outerFrameCost + subFrameCost + laborCharge + settingCharge + polishCharge;
+  const framingSubtotal = outerFrameCost + subFrameCost + laborCharge + settingCharge + polishCharge;
+  const framingPartnerMargin = framingSubtotal * 0.15; // 15% framing partner margin
+  const framingCost = framingSubtotal + framingPartnerMargin;
 
   // Fixed costs
   const addons = 500 + 500 + 1500; // transport + packaging + shipping
@@ -101,6 +105,8 @@ function calculateSpecPrice(
     laborCharge,
     settingCharge,
     polishCharge,
+    framingSubtotal,
+    framingPartnerMargin,
     framingCost,
     addons,
     baseCost,
@@ -115,6 +121,19 @@ function calculateSpecPrice(
 const fmt = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 const genId = () => Math.random().toString(36).substring(2, 9);
 const autoLabel = (w: string, h: string) => (w && h ? `${w}×${h} cm` : '');
+
+// ─── Predefined sizes ────────────────────────────────────────────────────────
+const PRESET_SIZES: { label: string; group: string; w: number; h: number }[] = [
+  // Rectangular
+  { label: '30×45 cm', group: 'Rectangular', w: 30, h: 45 },
+  { label: '60×90 cm', group: 'Rectangular', w: 60, h: 90 },
+  { label: '90×120 cm', group: 'Rectangular', w: 90, h: 120 },
+  // Square
+  { label: '30×30 cm', group: 'Square', w: 30, h: 30 },
+  { label: '60×60 cm', group: 'Square', w: 60, h: 60 },
+  { label: '90×90 cm', group: 'Square', w: 90, h: 90 },
+  { label: '150×150 cm', group: 'Square', w: 150, h: 150 },
+];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -542,75 +561,129 @@ function AddProductContent() {
 
                   {/* Sizes */}
                   <div style={{ marginBottom: 'var(--space-lg)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
-                      <label style={{ fontWeight: 600, fontSize: '14px' }}>Sizes</label>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={addSize}>+ Add Size</button>
-                    </div>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: '14px', marginBottom: 'var(--space-sm)' }}>Sizes</label>
                     <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>
-                      Add one or more sizes. Pricing is calculated independently for each size. Label is optional (auto-filled as W×H cm).
+                      Pick from predefined sizes or add custom dimensions below. Pricing is calculated independently for each size.
                     </p>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
-                      {/* Header row */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 32px', gap: 'var(--space-sm)', padding: '0 2px' }}>
-                        <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Label (optional)</span>
-                        <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Width (cm)</span>
-                        <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Height (cm)</span>
-                        <span />
+                    {/* Predefined size chips */}
+                    {(['Rectangular', 'Square'] as const).map(group => (
+                      <div key={group} style={{ marginBottom: 'var(--space-md)' }}>
+                        <div className="text-xs text-muted" style={{ fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{group}</div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {PRESET_SIZES.filter(p => p.group === group).map(preset => {
+                            const alreadyAdded = sizes.some(
+                              s => parseFloat(s.widthCm) === preset.w && parseFloat(s.heightCm) === preset.h
+                            );
+                            return (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={() => {
+                                  if (alreadyAdded) return;
+                                  // If only one empty size row exists, fill it; otherwise append
+                                  const emptyIdx = sizes.findIndex(s => !s.widthCm && !s.heightCm);
+                                  if (emptyIdx !== -1) {
+                                    setSizes(prev => prev.map((s, i) =>
+                                      i === emptyIdx
+                                        ? { ...s, widthCm: String(preset.w), heightCm: String(preset.h), label: s.label || preset.label }
+                                        : s
+                                    ));
+                                  } else {
+                                    setSizes(prev => [...prev, { id: genId(), label: preset.label, widthCm: String(preset.w), heightCm: String(preset.h) }]);
+                                  }
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  fontWeight: alreadyAdded ? 600 : 400,
+                                  border: `2px solid ${alreadyAdded ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                                  borderRadius: 'var(--radius-md)',
+                                  background: alreadyAdded ? 'rgba(var(--color-accent-rgb,100,80,60),0.1)' : 'var(--color-bg-light)',
+                                  color: alreadyAdded ? 'var(--color-accent)' : 'var(--color-text)',
+                                  cursor: alreadyAdded ? 'default' : 'pointer',
+                                  transition: 'all 0.15s',
+                                }}
+                              >
+                                {alreadyAdded ? '✓ ' : ''}{preset.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Custom size rows */}
+                    <div style={{ marginTop: 'var(--space-md)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div className="text-xs text-muted" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Custom Sizes</div>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={addSize}>+ Add Custom</button>
                       </div>
 
-                      {sizes.map((size, idx) => {
-                        const w = parseFloat(size.widthCm);
-                        const h = parseFloat(size.heightCm);
-                        const areaSqft = (w && h) ? ((w * h) / 900).toFixed(3) : null;
-                        return (
-                          <div key={size.id}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 32px', gap: 'var(--space-sm)', alignItems: 'center' }}>
-                              <input
-                                type="text"
-                                value={size.label}
-                                onChange={e => updateSize(size.id, 'label', e.target.value)}
-                                placeholder={autoLabel(size.widthCm, size.heightCm) || 'e.g. Small'}
-                                style={{ fontSize: '13px' }}
-                              />
-                              <input
-                                type="number"
-                                value={size.widthCm}
-                                onChange={e => updateSize(size.id, 'widthCm', e.target.value)}
-                                min="1"
-                                step="0.1"
-                                placeholder="40"
-                                style={{ fontSize: '13px' }}
-                              />
-                              <input
-                                type="number"
-                                value={size.heightCm}
-                                onChange={e => updateSize(size.id, 'heightCm', e.target.value)}
-                                min="1"
-                                step="0.1"
-                                placeholder="30"
-                                style={{ fontSize: '13px' }}
-                              />
-                              <button
-                                type="button"
-                                disabled={sizes.length === 1}
-                                onClick={() => removeSize(size.id)}
-                                style={{
-                                  background: 'none', border: '1px solid var(--color-border)',
-                                  borderRadius: 'var(--radius-sm)', cursor: sizes.length === 1 ? 'default' : 'pointer',
-                                  opacity: sizes.length === 1 ? 0.4 : 1, color: 'var(--color-error)',
-                                  fontWeight: 700, fontSize: '14px', padding: '4px', lineHeight: 1,
-                                }}
-                              >×</button>
-                            </div>
-                            {areaSqft && (
-                              <div className="text-xs text-muted" style={{ marginTop: '3px', paddingLeft: '2px' }}>
-                                Area: {areaSqft} sqft
-                              </div>
-                            )}
+                      {sizes.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+                          {/* Header */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 32px', gap: 'var(--space-sm)', padding: '0 2px' }}>
+                            <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Label (optional)</span>
+                            <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Width (cm)</span>
+                            <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Height (cm)</span>
+                            <span />
                           </div>
-                        );
-                      })}
+
+                          {sizes.map((size) => {
+                            const w = parseFloat(size.widthCm);
+                            const h = parseFloat(size.heightCm);
+                            const areaSqft = (w && h) ? ((w * h) / 900).toFixed(3) : null;
+                            return (
+                              <div key={size.id}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 32px', gap: 'var(--space-sm)', alignItems: 'center' }}>
+                                  <input
+                                    type="text"
+                                    value={size.label}
+                                    onChange={e => updateSize(size.id, 'label', e.target.value)}
+                                    placeholder={autoLabel(size.widthCm, size.heightCm) || 'e.g. Small'}
+                                    style={{ fontSize: '13px' }}
+                                  />
+                                  <input
+                                    type="number"
+                                    value={size.widthCm}
+                                    onChange={e => updateSize(size.id, 'widthCm', e.target.value)}
+                                    min="1"
+                                    step="0.1"
+                                    placeholder="40"
+                                    style={{ fontSize: '13px' }}
+                                  />
+                                  <input
+                                    type="number"
+                                    value={size.heightCm}
+                                    onChange={e => updateSize(size.id, 'heightCm', e.target.value)}
+                                    min="1"
+                                    step="0.1"
+                                    placeholder="30"
+                                    style={{ fontSize: '13px' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={sizes.length === 1}
+                                    onClick={() => removeSize(size.id)}
+                                    style={{
+                                      background: 'none', border: '1px solid var(--color-border)',
+                                      borderRadius: 'var(--radius-sm)', cursor: sizes.length === 1 ? 'default' : 'pointer',
+                                      opacity: sizes.length === 1 ? 0.4 : 1, color: 'var(--color-error)',
+                                      fontWeight: 700, fontSize: '14px', padding: '4px', lineHeight: 1,
+                                    }}
+                                  >×</button>
+                                </div>
+                                {areaSqft && (
+                                  <div className="text-xs text-muted" style={{ marginTop: '3px', paddingLeft: '2px' }}>
+                                    Area: {areaSqft} sqft
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -730,6 +803,8 @@ function AddProductContent() {
                                             <div>Labour: {fmt(p.laborCharge)}</div>
                                             <div>Setting: {fmt(p.settingCharge)}</div>
                                             <div>Polish: {fmt(p.polishCharge)}</div>
+                                            <div>Subtotal: {fmt(p.framingSubtotal)}</div>
+                                            <div>Partner margin (15%): {fmt(p.framingPartnerMargin)}</div>
                                             <div style={{ fontWeight: 600 }}>Total: {fmt(p.framingCost)}</div>
                                           </div>
                                         </div>
