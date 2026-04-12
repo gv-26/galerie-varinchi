@@ -13,10 +13,20 @@ interface SpecOption { value: string; }
 interface Specification { id: string; name: string; options: SpecOption[]; }
 interface Artist { id: string; fullName: string; }
 
+interface SizeEntry {
+  id: string;
+  label: string;   // custom label, e.g. "Small", "Large" — auto-filled as "40×30 cm" if blank
+  widthCm: string;
+  heightCm: string;
+}
+
 interface PriceBreakdown {
-  combo: string;
+  combo: string;          // "40×30 cm | Canvas | Teakwood"
+  sizeLabel: string;
   printMaterial: string;
   frameMaterial: string;
+  widthCm: number;
+  heightCm: number;
   printingCost: number;
   outerFrameCost: number;
   subFrameCost: number;
@@ -38,6 +48,7 @@ interface PriceBreakdown {
 function calculateSpecPrice(
   widthCm: number,
   heightCm: number,
+  sizeLabel: string,
   printMaterial: 'Canvas' | 'Paper',
   frameMaterial: 'Teakwood' | 'Ashwood',
   multiplier: number = 3
@@ -78,9 +89,12 @@ function calculateSpecPrice(
   const companyMargin = priceBeforeGST / multiplier;
 
   return {
-    combo: `${printMaterial} | ${frameMaterial}`,
+    combo: `${sizeLabel} | ${printMaterial} | ${frameMaterial}`,
+    sizeLabel,
     printMaterial,
     frameMaterial,
+    widthCm,
+    heightCm,
     printingCost,
     outerFrameCost,
     subFrameCost,
@@ -99,6 +113,8 @@ function calculateSpecPrice(
 }
 
 const fmt = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+const genId = () => Math.random().toString(36).substring(2, 9);
+const autoLabel = (w: string, h: string) => (w && h ? `${w}×${h} cm` : '');
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -129,19 +145,18 @@ function AddProductContent() {
   // Fixed pricing
   const [basePrice, setBasePrice] = useState('');
 
-  // Specification pricing
-  const [widthCm, setWidthCm] = useState('');
-  const [heightCm, setHeightCm] = useState('');
+  // Specification pricing — multiple sizes
+  const [sizes, setSizes] = useState<SizeEntry[]>([
+    { id: genId(), label: '', widthCm: '', heightCm: '' }
+  ]);
   const [useCanvas, setUseCanvas] = useState(true);
   const [usePaper, setUsePaper] = useState(false);
   const [useTeakwood, setUseTeakwood] = useState(true);
   const [useAshwood, setUseAshwood] = useState(false);
+  const [multiplier, setMultiplier] = useState('3');
 
   // Expanded row tracking for breakdown
   const [expandedCombo, setExpandedCombo] = useState<string | null>(null);
-
-  // Pricing multiplier (default 3: baseCost × multiplier = pre-GST price)
-  const [multiplier, setMultiplier] = useState('3');
 
   // Fixed mode: Dynamic Specifications (manual)
   const [specs, setSpecs] = useState<Specification[]>([]);
@@ -189,7 +204,7 @@ function AddProductContent() {
           }
           const parsedSpecs = JSON.parse(req.specifications || '[]');
           setSpecs(parsedSpecs.map((s: any) => ({
-            id: Math.random().toString(36).substring(2, 9),
+            id: genId(),
             name: s.name,
             options: s.options.map((o: string) => ({ value: o }))
           })));
@@ -229,22 +244,24 @@ function AddProductContent() {
     }
   };
 
+  // ── Size Helpers ──────────────────────────────────────────────────────────
+  const addSize = () => setSizes(prev => [...prev, { id: genId(), label: '', widthCm: '', heightCm: '' }]);
+  const removeSize = (id: string) => setSizes(prev => prev.filter(s => s.id !== id));
+  const updateSize = (id: string, field: keyof SizeEntry, value: string) =>
+    setSizes(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+
   // ── Manual Spec Helpers (Fixed mode) ─────────────────────────────────────
-  const addSpec = () => setSpecs([...specs, { id: Math.random().toString(36).substring(2, 9), name: '', options: [{ value: '' }] }]);
+  const addSpec = () => setSpecs([...specs, { id: genId(), name: '', options: [{ value: '' }] }]);
   const removeSpec = (id: string) => setSpecs(specs.filter(s => s.id !== id));
   const updateSpecName = (id: string, name: string) => setSpecs(specs.map(s => s.id === id ? { ...s, name } : s));
   const addSpecOption = (specId: string) => setSpecs(specs.map(s => s.id === specId ? { ...s, options: [...s.options, { value: '' }] } : s));
   const removeSpecOption = (specId: string, optIndex: number) => setSpecs(specs.map(s => {
     if (s.id !== specId) return s;
-    const newOpts = [...s.options];
-    newOpts.splice(optIndex, 1);
-    return { ...s, options: newOpts };
+    const newOpts = [...s.options]; newOpts.splice(optIndex, 1); return { ...s, options: newOpts };
   }));
   const updateSpecOption = (specId: string, optIndex: number, value: string) => setSpecs(specs.map(s => {
     if (s.id !== specId) return s;
-    const newOpts = [...s.options];
-    newOpts[optIndex].value = value;
-    return { ...s, options: newOpts };
+    const newOpts = [...s.options]; newOpts[optIndex].value = value; return { ...s, options: newOpts };
   }));
   const moveOption = (specId: string, optIndex: number, direction: 'up' | 'down') => setSpecs(specs.map(s => {
     if (s.id !== specId) return s;
@@ -270,12 +287,10 @@ function AddProductContent() {
   const combinations = generateCombinations();
   const handlePriceChange = (combo: string, val: string) => setPrices(prev => ({ ...prev, [combo]: val }));
 
-  // ── Spec Pricing Calculator ───────────────────────────────────────────────
+  // ── Spec Pricing Calculator (sizes × prints × frames) ────────────────────
   const calculatedPrices = useMemo((): PriceBreakdown[] => {
-    const w = parseFloat(widthCm);
-    const h = parseFloat(heightCm);
     const m = parseFloat(multiplier);
-    if (!w || !h || w <= 0 || h <= 0 || !m || m <= 0) return [];
+    if (!m || m <= 0) return [];
 
     const prints: Array<'Canvas' | 'Paper'> = [];
     if (useCanvas) prints.push('Canvas');
@@ -284,10 +299,25 @@ function AddProductContent() {
     if (useTeakwood) frames.push('Teakwood');
     if (useAshwood) frames.push('Ashwood');
 
+    if (prints.length === 0 || frames.length === 0) return [];
+
     const results: PriceBreakdown[] = [];
-    for (const p of prints) for (const f of frames) results.push(calculateSpecPrice(w, h, p, f, m));
+    for (const size of sizes) {
+      const w = parseFloat(size.widthCm);
+      const h = parseFloat(size.heightCm);
+      if (!w || !h || w <= 0 || h <= 0) continue;
+      const label = size.label.trim() || autoLabel(size.widthCm, size.heightCm);
+      for (const p of prints) {
+        for (const f of frames) {
+          results.push(calculateSpecPrice(w, h, label, p, f, m));
+        }
+      }
+    }
     return results;
-  }, [widthCm, heightCm, useCanvas, usePaper, useTeakwood, useAshwood, multiplier]);
+  }, [sizes, useCanvas, usePaper, useTeakwood, useAshwood, multiplier]);
+
+  // Valid sizes = sizes where both w and h are filled
+  const validSizes = sizes.filter(s => parseFloat(s.widthCm) > 0 && parseFloat(s.heightCm) > 0);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -310,25 +340,25 @@ function AddProductContent() {
       }
     } else {
       if (calculatedPrices.length === 0) {
-        setError('Please enter valid dimensions and select at least one print and frame material.');
+        setError('Please add at least one valid size and select at least one print and frame material.');
         setLoading(false);
         return;
       }
 
-      // Build specs from enabled materials
       const printOpts: string[] = [];
       if (useCanvas) printOpts.push('Canvas');
       if (usePaper) printOpts.push('Paper');
       const frameOpts: string[] = [];
       if (useTeakwood) frameOpts.push('Teakwood');
       if (useAshwood) frameOpts.push('Ashwood');
+      const sizeOpts = validSizes.map(s => s.label.trim() || autoLabel(s.widthCm, s.heightCm));
 
       finalSpecs = [
+        { name: 'Size', options: sizeOpts },
         { name: 'Print Material', options: printOpts },
         { name: 'Frame Material', options: frameOpts },
       ];
 
-      // Use lowest price as base price
       finalBasePrice = Math.min(...calculatedPrices.map(p => p.finalPrice));
       for (const p of calculatedPrices) {
         finalPriceModifiers[p.combo] = Math.round(p.finalPrice);
@@ -401,7 +431,7 @@ function AddProductContent() {
 
   return (
     <div className="page-content fade-in">
-      <div className="container" style={{ maxWidth: '720px' }}>
+      <div className="container" style={{ maxWidth: '760px' }}>
         <div style={{ marginBottom: 'var(--space-xl)' }}>
           <Link href="/admin/content" className="text-sm text-muted">← Back to Website Content</Link>
         </div>
@@ -499,42 +529,95 @@ function AddProductContent() {
 
               {/* ── Fixed Pricing ── */}
               {pricingMode === 'fixed' && (
-                <div>
-                  <div className="form-group">
-                    <label>Base Price (₹)</label>
-                    <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-xs)' }}>This applies if no specific options are selected, or as a default.</p>
-                    <input type="number" value={basePrice} onChange={e => setBasePrice(e.target.value)} required min="0" step="0.01" placeholder="2500" />
-                  </div>
+                <div className="form-group">
+                  <label>Base Price (₹)</label>
+                  <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-xs)' }}>This applies if no specific options are selected, or as a default.</p>
+                  <input type="number" value={basePrice} onChange={e => setBasePrice(e.target.value)} required min="0" step="0.01" placeholder="2500" />
                 </div>
               )}
 
               {/* ── Specification Pricing ── */}
               {pricingMode === 'specification' && (
                 <div>
-                  {/* Dimensions */}
+
+                  {/* Sizes */}
                   <div style={{ marginBottom: 'var(--space-lg)' }}>
-                    <label style={{ display: 'block', fontWeight: 600, fontSize: '14px', marginBottom: 'var(--space-sm)' }}>Dimensions</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Width (cm)</label>
-                        <input type="number" value={widthCm} onChange={e => setWidthCm(e.target.value)} min="1" step="0.1" placeholder="e.g. 40" />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Height (cm)</label>
-                        <input type="number" value={heightCm} onChange={e => setHeightCm(e.target.value)} min="1" step="0.1" placeholder="e.g. 30" />
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+                      <label style={{ fontWeight: 600, fontSize: '14px' }}>Sizes</label>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={addSize}>+ Add Size</button>
                     </div>
-                    {widthCm && heightCm && (
-                      <p className="text-xs text-muted" style={{ marginTop: 'var(--space-xs)' }}>
-                        Area: {((parseFloat(widthCm) * parseFloat(heightCm)) / 900).toFixed(3)} sqft
-                      </p>
-                    )}
+                    <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>
+                      Add one or more sizes. Pricing is calculated independently for each size. Label is optional (auto-filled as W×H cm).
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+                      {/* Header row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 32px', gap: 'var(--space-sm)', padding: '0 2px' }}>
+                        <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Label (optional)</span>
+                        <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Width (cm)</span>
+                        <span className="text-xs text-muted" style={{ fontWeight: 600 }}>Height (cm)</span>
+                        <span />
+                      </div>
+
+                      {sizes.map((size, idx) => {
+                        const w = parseFloat(size.widthCm);
+                        const h = parseFloat(size.heightCm);
+                        const areaSqft = (w && h) ? ((w * h) / 900).toFixed(3) : null;
+                        return (
+                          <div key={size.id}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 32px', gap: 'var(--space-sm)', alignItems: 'center' }}>
+                              <input
+                                type="text"
+                                value={size.label}
+                                onChange={e => updateSize(size.id, 'label', e.target.value)}
+                                placeholder={autoLabel(size.widthCm, size.heightCm) || 'e.g. Small'}
+                                style={{ fontSize: '13px' }}
+                              />
+                              <input
+                                type="number"
+                                value={size.widthCm}
+                                onChange={e => updateSize(size.id, 'widthCm', e.target.value)}
+                                min="1"
+                                step="0.1"
+                                placeholder="40"
+                                style={{ fontSize: '13px' }}
+                              />
+                              <input
+                                type="number"
+                                value={size.heightCm}
+                                onChange={e => updateSize(size.id, 'heightCm', e.target.value)}
+                                min="1"
+                                step="0.1"
+                                placeholder="30"
+                                style={{ fontSize: '13px' }}
+                              />
+                              <button
+                                type="button"
+                                disabled={sizes.length === 1}
+                                onClick={() => removeSize(size.id)}
+                                style={{
+                                  background: 'none', border: '1px solid var(--color-border)',
+                                  borderRadius: 'var(--radius-sm)', cursor: sizes.length === 1 ? 'default' : 'pointer',
+                                  opacity: sizes.length === 1 ? 0.4 : 1, color: 'var(--color-error)',
+                                  fontWeight: 700, fontSize: '14px', padding: '4px', lineHeight: 1,
+                                }}
+                              >×</button>
+                            </div>
+                            {areaSqft && (
+                              <div className="text-xs text-muted" style={{ marginTop: '3px', paddingLeft: '2px' }}>
+                                Area: {areaSqft} sqft
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Print Material */}
                   <div style={{ marginBottom: 'var(--space-lg)' }}>
                     <label style={{ display: 'block', fontWeight: 600, fontSize: '14px', marginBottom: 'var(--space-sm)' }}>Print Material</label>
-                    <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-sm)' }}>Select which print materials are available. Pricing is calculated for each enabled material.</p>
+                    <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-sm)' }}>Select available print materials. Pricing is calculated for each enabled option.</p>
                     <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
                       <button type="button" style={toggleBtn(useCanvas)} onClick={() => setUseCanvas(v => !v)}>
                         <span>{useCanvas ? '☑' : '☐'}</span> Canvas <span style={{ fontSize: '11px', opacity: 0.7 }}>₹120/sqft</span>
@@ -548,7 +631,7 @@ function AddProductContent() {
                   {/* Frame Material */}
                   <div style={{ marginBottom: 'var(--space-lg)' }}>
                     <label style={{ display: 'block', fontWeight: 600, fontSize: '14px', marginBottom: 'var(--space-sm)' }}>Frame Material</label>
-                    <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-sm)' }}>Select which frame materials are available.</p>
+                    <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-sm)' }}>Select available frame materials.</p>
                     <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
                       <button type="button" style={toggleBtn(useTeakwood)} onClick={() => setUseTeakwood(v => !v)}>
                         <span>{useTeakwood ? '☑' : '☐'}</span> Teakwood <span style={{ fontSize: '11px', opacity: 0.7 }}>₹5000/cu.ft</span>
@@ -563,19 +646,12 @@ function AddProductContent() {
                   <div style={{ marginBottom: 'var(--space-lg)', padding: 'var(--space-md)', background: 'var(--color-bg-light)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                     <label style={{ display: 'block', fontWeight: 600, fontSize: '14px', marginBottom: 'var(--space-xs)' }}>Pricing Multiplier</label>
                     <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-sm)' }}>
-                      Final price before GST = Base Cost &times; Multiplier. Default is 3 (covers cost + artist royalty + company margin). Adjust if needed.
+                      Final price before GST = Base Cost &times; Multiplier. Default is 3 (cost + artist royalty + company margin).
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
                       <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Base Cost &times;</span>
-                      <input
-                        type="number"
-                        value={multiplier}
-                        onChange={e => setMultiplier(e.target.value)}
-                        min="1"
-                        max="20"
-                        step="0.1"
-                        style={{ width: '90px', fontWeight: 600, fontSize: '15px' }}
-                      />
+                      <input type="number" value={multiplier} onChange={e => setMultiplier(e.target.value)}
+                        min="1" max="20" step="0.1" style={{ width: '90px', fontWeight: 600, fontSize: '15px' }} />
                       <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>+ 18% GST = Final Price</span>
                     </div>
                   </div>
@@ -584,20 +660,27 @@ function AddProductContent() {
                   {calculatedPrices.length > 0 && (
                     <div style={{ marginTop: 'var(--space-lg)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
-                        <label style={{ fontWeight: 600, fontSize: '14px' }}>Calculated Pricing Preview</label>
-                        <span className="text-xs text-muted">Click a row for full breakdown</span>
+                        <label style={{ fontWeight: 600, fontSize: '14px' }}>
+                          Calculated Pricing Preview
+                          <span className="text-xs text-muted" style={{ fontWeight: 400, marginLeft: '8px' }}>
+                            {calculatedPrices.length} combination{calculatedPrices.length !== 1 ? 's' : ''}
+                          </span>
+                        </label>
+                        <span className="text-xs text-muted">Click a row for breakdown</span>
                       </div>
 
                       <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                           <thead>
                             <tr style={{ background: 'var(--color-bg-light)', borderBottom: '2px solid var(--color-border)' }}>
-                              <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Combination</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Size</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Print</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>Frame</th>
                               <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>Printing</th>
                               <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>Framing</th>
                               <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>Add-ons</th>
                               <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>Pre-GST</th>
-                              <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>GST (18%)</th>
+                              <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>GST 18%</th>
                               <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--color-accent)' }}>Final Price</th>
                             </tr>
                           </thead>
@@ -610,14 +693,15 @@ function AddProductContent() {
                                   style={{
                                     borderBottom: expandedCombo === p.combo ? 'none' : '1px solid var(--color-border-light)',
                                     cursor: 'pointer',
-                                    background: i % 2 === 0 ? 'transparent' : 'var(--color-bg-light)',
-                                    transition: 'background 0.15s',
+                                    background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)',
                                   }}
                                 >
                                   <td style={{ padding: '10px 12px', fontWeight: 500 }}>
                                     <span style={{ marginRight: '6px', fontSize: '10px', opacity: 0.5 }}>{expandedCombo === p.combo ? '▼' : '▶'}</span>
-                                    {p.combo}
+                                    {p.sizeLabel}
                                   </td>
+                                  <td style={{ padding: '10px 12px' }}>{p.printMaterial}</td>
+                                  <td style={{ padding: '10px 12px' }}>{p.frameMaterial}</td>
                                   <td style={{ padding: '10px 12px', textAlign: 'right' }}>{fmt(p.printingCost)}</td>
                                   <td style={{ padding: '10px 12px', textAlign: 'right' }}>{fmt(p.framingCost)}</td>
                                   <td style={{ padding: '10px 12px', textAlign: 'right' }}>{fmt(p.addons)}</td>
@@ -626,22 +710,23 @@ function AddProductContent() {
                                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--color-accent)', fontSize: '14px' }}>{fmt(p.finalPrice)}</td>
                                 </tr>
                                 {expandedCombo === p.combo && (
-                                  <tr key={`${p.combo}-expanded`} style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)' }}>
-                                    <td colSpan={7} style={{ padding: '12px 24px' }}>
-                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 'var(--space-md)' }}>
+                                  <tr key={`${p.combo}-exp`} style={{ background: 'var(--color-bg-light)', borderBottom: '1px solid var(--color-border)' }}>
+                                    <td colSpan={9} style={{ padding: '14px 24px' }}>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--space-md)' }}>
                                         <div>
-                                          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Printing Breakdown</div>
-                                          <div className="text-xs" style={{ lineHeight: 1.9 }}>
-                                            <div>Area: {((parseFloat(widthCm) * parseFloat(heightCm)) / 900).toFixed(3)} sqft</div>
+                                          <div style={{ fontWeight: 600, fontSize: '11px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Printing</div>
+                                          <div className="text-xs" style={{ lineHeight: 2 }}>
+                                            <div>Dimensions: {p.widthCm}×{p.heightCm} cm</div>
+                                            <div>Area: {((p.widthCm * p.heightCm) / 900).toFixed(4)} sqft</div>
                                             <div>Rate: ₹{p.printMaterial === 'Canvas' ? 120 : 90}/sqft ({p.printMaterial})</div>
                                             <div style={{ fontWeight: 600 }}>Total: {fmt(p.printingCost)}</div>
                                           </div>
                                         </div>
                                         <div>
-                                          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Framing Breakdown</div>
-                                          <div className="text-xs" style={{ lineHeight: 1.9 }}>
+                                          <div style={{ fontWeight: 600, fontSize: '11px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Framing</div>
+                                          <div className="text-xs" style={{ lineHeight: 2 }}>
                                             <div>Outer frame: {fmt(p.outerFrameCost)}</div>
-                                            <div>Sub-frame: {fmt(p.subFrameCost)}</div>
+                                            <div>Sub-frame (50%): {fmt(p.subFrameCost)}</div>
                                             <div>Labour: {fmt(p.laborCharge)}</div>
                                             <div>Setting: {fmt(p.settingCharge)}</div>
                                             <div>Polish: {fmt(p.polishCharge)}</div>
@@ -649,8 +734,8 @@ function AddProductContent() {
                                           </div>
                                         </div>
                                         <div>
-                                          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Fixed Add-ons</div>
-                                          <div className="text-xs" style={{ lineHeight: 1.9 }}>
+                                          <div style={{ fontWeight: 600, fontSize: '11px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Fixed Add-ons</div>
+                                          <div className="text-xs" style={{ lineHeight: 2 }}>
                                             <div>Transportation: ₹500</div>
                                             <div>Packaging: ₹500</div>
                                             <div>Shipping: ₹1,500</div>
@@ -658,13 +743,15 @@ function AddProductContent() {
                                           </div>
                                         </div>
                                         <div>
-                                          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Internal (Admin only)</div>
-                                          <div className="text-xs" style={{ lineHeight: 1.9 }}>
+                                          <div style={{ fontWeight: 600, fontSize: '11px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>Internal (Admin only)</div>
+                                          <div className="text-xs" style={{ lineHeight: 2 }}>
                                             <div>Base cost: {fmt(p.baseCost)}</div>
-                                            <div>Artist royalty share: {fmt(p.artistRoyalty)}</div>
+                                            <div>Multiplier: ×{multiplier}</div>
+                                            <div>Pre-GST: {fmt(p.priceBeforeGST)}</div>
+                                            <div>Artist royalty: {fmt(p.artistRoyalty)}</div>
                                             <div>Company margin: {fmt(p.companyMargin)}</div>
                                             <div>GST (18%): {fmt(p.gst)}</div>
-                                            <div style={{ fontWeight: 700 }}>Final price: {fmt(p.finalPrice)}</div>
+                                            <div style={{ fontWeight: 700 }}>Final: {fmt(p.finalPrice)}</div>
                                           </div>
                                         </div>
                                       </div>
@@ -679,18 +766,18 @@ function AddProductContent() {
 
                       <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--color-bg-light)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-light)' }}>
                         <p className="text-xs text-muted" style={{ margin: 0, lineHeight: 1.8 }}>
-                          <strong>How prices are saved:</strong> The lowest calculated price becomes the base price. All combination prices are stored as variant modifiers and used at checkout.
+                          <strong>How prices are saved:</strong> The lowest calculated price becomes the base price. All {calculatedPrices.length} combination prices are stored as variant modifiers and used at checkout.
                           <br />
-                          <strong>Price formula:</strong> Base Cost &times; {multiplier || 3} + 18% GST
+                          <strong>Spec axes:</strong> Size ({validSizes.length}) × Print Material × Frame Material = {calculatedPrices.length} combinations · <strong>Formula:</strong> Base Cost &times; {multiplier || 3} + 18% GST
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* Warning if no selections */}
-                  {calculatedPrices.length === 0 && (widthCm || heightCm || useCanvas || usePaper) && (
+                  {/* Warning if selections incomplete */}
+                  {calculatedPrices.length === 0 && validSizes.length > 0 && (
                     <div className="alert alert-error" style={{ fontSize: '13px' }}>
-                      Enter valid dimensions and select at least one print material and one frame material to calculate pricing.
+                      Select at least one print material and one frame material to calculate pricing.
                     </div>
                   )}
                 </div>
@@ -705,7 +792,6 @@ function AddProductContent() {
                   <button type="button" className="btn btn-secondary btn-sm" onClick={addSpec}>+ Add Specification</button>
                 </div>
                 <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>Define customizable specs (like Medium, Frame, Size) and their options.</p>
-
                 {specs.length === 0 ? (
                   <p className="text-sm text-muted">No specifications added yet.</p>
                 ) : (
@@ -776,7 +862,10 @@ function AddProductContent() {
             <button
               className="btn btn-primary btn-full"
               type="submit"
-              disabled={loading || uploading || !subCategoryId || (pricingMode === 'specification' && calculatedPrices.length === 0)}
+              disabled={
+                loading || uploading || !subCategoryId ||
+                (pricingMode === 'specification' && calculatedPrices.length === 0)
+              }
               style={{ marginTop: 'var(--space-lg)' }}
             >
               {loading ? <span className="spinner"></span> : 'Add Product'}
