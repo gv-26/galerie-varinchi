@@ -7,76 +7,120 @@ import jsPDF from 'jspdf';
 import { resizeImage } from '@/lib/image-utils';
 
 const ARTIST_AGREEMENT_VERSION = 'v1.0';
-const ARTIST_AGREEMENT_TEXT = `ARTIST AGREEMENT — GALERIE VARINCHI
+const ARTIST_AGREEMENT_TEXT = `GALERIE VARINCHI — ARTIST COLLABORATION TERMS AND CONDITIONS
 
+Effective Date: April 3, 2026
 Version ${ARTIST_AGREEMENT_VERSION}
-Effective Date: Upon Acceptance
 
-This Artist Agreement ("Agreement") is entered into between Galerie Varinchi ("Gallery", "We", "Us") and the undersigned Artist ("Artist", "You") upon acceptance of these terms.
+These Terms and Conditions govern the collaboration between Galerie Varinchi ("the Platform") and the Artist whose artworks are licensed for reproduction and sale through the Galerie Varinchi platform. By entering into collaboration with Galerie Varinchi, the Artist agrees to the following terms.
 
-1. SCOPE OF AGREEMENT
-By submitting your application to join Galerie Varinchi as an Artist, you agree to abide by the terms and conditions set forth in this Agreement. This Agreement governs the listing, sale, and promotion of your artworks through our platform.
+1. DEFINITIONS
 
-2. COMMISSION STRUCTURE
-2.1 The Gallery shall retain a commission of 20% (twenty percent) on each sale of Artist's work through the platform.
-2.2 The remaining 80% (eighty percent) of the sale price shall be remitted to the Artist within 14 business days of the completed transaction.
-2.3 The Gallery reserves the right to modify commission rates with a 30-day written notice to the Artist.
+Artist: The creator and copyright holder of the artwork licensed to Galerie Varinchi.
+Artwork: Any digital artwork, illustration, painting, photograph, or visual work submitted by the Artist for reproduction and sale.
+Artist Base Value (X): The original price assigned to the artwork by the Artist.
+Retail Price (Y): The final selling price of the artwork to customers, excluding Goods and Services Tax (GST).
+Net Revenue: The retail selling price excluding GST.
 
-3. ARTWORK SUBMISSIONS
-3.1 All artworks submitted must be original works created by the Artist.
-3.2 The Artist warrants that they have full legal rights to sell and distribute the submitted works.
-3.3 The Gallery reserves the right to approve or decline any artwork submission at its sole discretion.
-3.4 Submitted artwork images become part of the Gallery's catalogue for promotional purposes.
+2. NATURE OF COLLABORATION
 
-4. LICENSING AND USAGE RIGHTS
-4.1 The Artist grants the Gallery a non-exclusive, worldwide license to display, reproduce, and promote the submitted artworks for the purpose of marketing and sales.
-4.2 This license extends to digital and print media, including but not limited to the Gallery website, social media, newsletters, and physical catalogues.
-4.3 The Artist retains all intellectual property rights to their original works.
+The Artist grants Galerie Varinchi a non-exclusive license to reproduce selected artworks as curated prints and sell them through the Galerie Varinchi platform. This collaboration allows the Artist to monetize their artwork while Galerie Varinchi manages production, logistics, and sales operations.
 
-5. PROPRIETARY RIGHTS
-5.1 All platform-related intellectual property, including but not limited to the Gallery's branding, website design, marketing materials, and proprietary technology, remain the exclusive property of Galerie Varinchi.
-5.2 The Artist shall not replicate, distribute, or use the Gallery's proprietary materials without prior written consent.
+3. OWNERSHIP & COPYRIGHT
 
-6. PRICING AND PAYMENTS
-6.1 The Artist may suggest pricing for their works, subject to Gallery approval.
-6.2 The Gallery may adjust pricing for promotional campaigns with prior notice to the Artist.
-6.3 Payments shall be processed via bank transfer or other mutually agreed-upon methods.
-6.4 The Artist is responsible for any applicable taxes on their earnings.
+All artworks remain the intellectual property of the Artist. The Artist retains:
+- Full copyright ownership
+- Moral rights associated with the artwork
+- The right to sell original artworks
+- The right to license the artwork to other parties
 
-7. SHIPPING AND FULFILLMENT
-7.1 The Artist is responsible for securely packaging artworks for shipment.
-7.2 Shipping costs may be borne by the buyer, the Artist, or shared, as determined by the listing terms.
-7.3 The Artist must ship artworks within 5 business days of order confirmation.
+Galerie Varinchi receives only the limited rights necessary to reproduce and sell prints of the artwork under the agreed licensing terms.
 
-8. RETURNS AND DISPUTES
-8.1 Returns due to damage during shipping shall be resolved between the Artist and the Gallery.
-8.2 If an artwork is returned due to quality discrepancy, the Artist shall bear the return shipping cost.
-8.3 The Gallery shall mediate disputes between Artists and buyers in good faith.
+Exclusions: Some prints are made under special request exclusively for Galerie Varinchi and will be sold as limited edition prints. They will be exclusive, sold limited in numbers, and should not be available through any other channels to maintain uniqueness.
 
-9. TERMINATION
-9.1 Either party may terminate this Agreement with 30 days' written notice.
-9.2 Upon termination, active orders shall be fulfilled, and pending payments settled within 30 days.
-9.3 The Gallery may immediately terminate this Agreement if the Artist violates any terms herein.
+4. LICENSING RIGHTS
 
-10. LIMITATION OF LIABILITY
-10.1 The Gallery shall not be liable for indirect, incidental, or consequential damages arising from the Artist's use of the platform.
-10.2 The Gallery's total liability shall not exceed the total commissions earned by the Gallery from the Artist's sales in the preceding 12 months.
+The Artist grants Galerie Varinchi the right to:
+- Reproduce the artwork as printed editions
+- Display the artwork on the Galerie Varinchi website and marketing materials
+- Sell the printed artwork to customers through official Galerie Varinchi sales channels
 
-11. DISPUTE RESOLUTION
-11.1 Any disputes arising from this Agreement shall be resolved through good-faith negotiation.
-11.2 If negotiation fails, disputes shall be submitted to binding arbitration in accordance with the laws of India.
-11.3 The jurisdiction for any legal proceedings shall be Bangalore, Karnataka, India.
+This license is non-exclusive, meaning the Artist may continue to sell or license the artwork elsewhere. However, some selected limited edition prints released through the platform may be exclusive to Galerie Varinchi and will not be made available for sale through other channels.
 
-12. AMENDMENTS
-12.1 The Gallery reserves the right to modify these terms with 30 days' notice to the Artist.
-12.2 Continued use of the platform after amendments indicates acceptance of the modified terms.
+5. USAGE LIMITATIONS
 
-13. ENTIRE AGREEMENT
-This Agreement, along with any annexures or addenda, constitutes the entire agreement between the parties and supersedes all prior agreements, representations, and understandings.
+5.1 Print Reproduction Only: The artwork may be reproduced only for the purpose of producing and selling art prints through the Galerie Varinchi platform. The artwork will not be used for merchandise such as clothing or home decor unrelated to prints without explicit written permission.
+5.2 No Unauthorized Modification: Galerie Varinchi will not alter the artwork in a manner that changes its artistic integrity. Permitted adjustments include resizing, color correction for print accuracy, and cropping for standard ratios.
+5.3 No Third-Party Licensing: Galerie Varinchi will not sublicense or distribute the artwork to third-party marketplaces without the Artist's written consent.
+5.4 Marketing Use: Galerie Varinchi may use the artwork images for website display, social media, and marketing campaigns to promote the artwork and the platform.
 
-By checking the box below, typing your full legal name, and submitting this form, you acknowledge that you have read, understood, and agree to be bound by the terms and conditions of this Artist Agreement.
+6. ROYALTY STRUCTURE
 
-Contact: galerievarinchi@gmail.com | +91 72596 44702
+6.1 Digital Artworks (Art print reproduction)
+Royalty payments are calculated based on Net Revenue (Retail Price excluding GST).
+Artist Base Value (X): Decided by Artist during submission. Final listing price is determined by Galerie Varinchi (adding framing, packaging, shipping, margin, etc.).
+
+Phase 1 — Initial Royalty Recovery: For each sale, the Artist receives 33% of Net Revenue (excluding GST). This continues until total royalty paid equals the Artist Base Value (X).
+Phase 2 — Ongoing Royalty: Once cumulative royalties reach the Artist Base Value (X), the Artist will receive 7% of Net Revenue (excluding GST) for as long as the artwork remains available.
+
+6.2 Handmade Artworks (Single piece)
+Artist Base Value (X) decided by the Artist will be paid upon sale. Product photoshoot must be done before listing; product must be handed over to Galerie Varinchi for Photoshoot.
+
+6.3 Payment Schedule
+Royalty payout is done monthly. It takes up to 18 days for royalty to be credited to the Artist’s wallet after each sale (to account for the return window). If a return occurs, the royalty for that particular sale will be cancelled.
+
+7. PRODUCTION & FULFILMENT
+
+Galerie Varinchi manages the entire process: fine art printing, framing, packaging, order processing, shipping, and customer support. Artists are not required to manage operational aspects of fulfilment.
+
+8. SALES REPORTING & PAYMENTS
+
+Galerie Varinchi will maintain records of all artwork sales. Artists will receive periodic royalty statements and payments according to the agreed payment cycle.
+
+9. ARTIST RESPONSIBILITIES
+
+The Artist agrees to:
+- Provide high-resolution artwork files suitable for printing.
+- Confirm they hold full rights to the artwork and do not infringe on third-party copyrights.
+- Provide accurate information regarding the artwork.
+The Artist is responsible for any legal claims arising from ownership disputes.
+
+10. QUALITY & FILE REQUIREMENTS
+
+Artists must provide files suitable for professional printing (high-resolution, correct color profiles, adequate dimensions). Galerie Varinchi may request revised files if standards are not met.
+
+11. ARTIST PROMOTION
+
+Promotion of Artists will be done by Galerie Varinchi through web and social channels. Artist grants permission for using their photographs, bio, and process videos/photos for promotional purposes.
+
+12. ARTIST EXIT POLICY
+
+An Artist may terminate collaboration with written notice. Upon termination:
+- The Artist's profile may be removed.
+- No new listings will be created.
+- Existing orders placed prior to termination will be fulfilled.
+
+13. ARTWORK WITHDRAWAL POLICY
+
+Artists may request removal of specific artworks. Withdrawal stops new sales, but existing orders will be fulfilled. Previously sold artworks remain valid collectible prints.
+
+14. PLATFORM RIGHTS TO REMOVE ARTWORK
+
+Galerie Varinchi reserves the right to remove artwork for legal violations, copyright disputes, or failure to meet platform standards.
+
+15. LIMITATION OF LIABILITY
+
+Galerie Varinchi is not liable for market performance, sales volume, or external disruptions affecting production/shipping.
+
+16. AMENDMENTS TO TERMS
+
+Galerie Varinchi may update these Terms when necessary. Artists will be notified of significant changes.
+
+17. GOVERNING LAW
+
+These Terms shall be governed by the laws of India. Any disputes shall fall under the jurisdiction of the appropriate courts in India.
+
+By checking the box below, typing your full legal name, and submitting this form, you acknowledge that you have read, understood, and agree to be bound by the terms and conditions of this Artist Collaboration Agreement.
 `;
 
 function formatFileSize(bytes: number) {
