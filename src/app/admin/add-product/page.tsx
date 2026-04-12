@@ -39,7 +39,8 @@ function calculateSpecPrice(
   widthCm: number,
   heightCm: number,
   printMaterial: 'Canvas' | 'Paper',
-  frameMaterial: 'Teakwood' | 'Ashwood'
+  frameMaterial: 'Teakwood' | 'Ashwood',
+  multiplier: number = 3
 ): PriceBreakdown {
   // Printing
   const areaSqft = (widthCm * heightCm) / 900;
@@ -68,13 +69,13 @@ function calculateSpecPrice(
 
   // Final price
   const baseCost = printingCost + framingCost + addons;
-  const priceBeforeGST = baseCost * 3;
+  const priceBeforeGST = baseCost * multiplier;
   const gst = priceBeforeGST * 0.18;
   const finalPrice = priceBeforeGST + gst;
 
   // Internal breakdown
-  const artistRoyalty = priceBeforeGST / 3;
-  const companyMargin = priceBeforeGST / 3;
+  const artistRoyalty = priceBeforeGST / multiplier;
+  const companyMargin = priceBeforeGST / multiplier;
 
   return {
     combo: `${printMaterial} | ${frameMaterial}`,
@@ -138,6 +139,9 @@ function AddProductContent() {
 
   // Expanded row tracking for breakdown
   const [expandedCombo, setExpandedCombo] = useState<string | null>(null);
+
+  // Pricing multiplier (default 3: baseCost × multiplier = pre-GST price)
+  const [multiplier, setMultiplier] = useState('3');
 
   // Fixed mode: Dynamic Specifications (manual)
   const [specs, setSpecs] = useState<Specification[]>([]);
@@ -270,7 +274,8 @@ function AddProductContent() {
   const calculatedPrices = useMemo((): PriceBreakdown[] => {
     const w = parseFloat(widthCm);
     const h = parseFloat(heightCm);
-    if (!w || !h || w <= 0 || h <= 0) return [];
+    const m = parseFloat(multiplier);
+    if (!w || !h || w <= 0 || h <= 0 || !m || m <= 0) return [];
 
     const prints: Array<'Canvas' | 'Paper'> = [];
     if (useCanvas) prints.push('Canvas');
@@ -280,9 +285,9 @@ function AddProductContent() {
     if (useAshwood) frames.push('Ashwood');
 
     const results: PriceBreakdown[] = [];
-    for (const p of prints) for (const f of frames) results.push(calculateSpecPrice(w, h, p, f));
+    for (const p of prints) for (const f of frames) results.push(calculateSpecPrice(w, h, p, f, m));
     return results;
-  }, [widthCm, heightCm, useCanvas, usePaper, useTeakwood, useAshwood]);
+  }, [widthCm, heightCm, useCanvas, usePaper, useTeakwood, useAshwood, multiplier]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -554,6 +559,27 @@ function AddProductContent() {
                     </div>
                   </div>
 
+                  {/* Pricing Multiplier */}
+                  <div style={{ marginBottom: 'var(--space-lg)', padding: 'var(--space-md)', background: 'var(--color-bg-light)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: '14px', marginBottom: 'var(--space-xs)' }}>Pricing Multiplier</label>
+                    <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-sm)' }}>
+                      Final price before GST = Base Cost &times; Multiplier. Default is 3 (covers cost + artist royalty + company margin). Adjust if needed.
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Base Cost &times;</span>
+                      <input
+                        type="number"
+                        value={multiplier}
+                        onChange={e => setMultiplier(e.target.value)}
+                        min="1"
+                        max="20"
+                        step="0.1"
+                        style={{ width: '90px', fontWeight: 600, fontSize: '15px' }}
+                      />
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>+ 18% GST = Final Price</span>
+                    </div>
+                  </div>
+
                   {/* Pricing Preview Table */}
                   {calculatedPrices.length > 0 && (
                     <div style={{ marginTop: 'var(--space-lg)' }}>
@@ -655,7 +681,7 @@ function AddProductContent() {
                         <p className="text-xs text-muted" style={{ margin: 0, lineHeight: 1.8 }}>
                           <strong>How prices are saved:</strong> The lowest calculated price becomes the base price. All combination prices are stored as variant modifiers and used at checkout.
                           <br />
-                          <strong>Price formula:</strong> Base Cost × 3 + 18% GST
+                          <strong>Price formula:</strong> Base Cost &times; {multiplier || 3} + 18% GST
                         </p>
                       </div>
                     </div>
