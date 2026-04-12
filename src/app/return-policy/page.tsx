@@ -1,48 +1,82 @@
-import Link from 'next/link';
-
 export default function ReturnPolicyPage() {
   return (
-    <div className="page-content fade-in">
-      <div className="container" style={{ maxWidth: '800px' }}>
-        <h1 className="heading-serif" style={{ fontSize: '40px', marginBottom: 'var(--space-2xl)', textAlign: 'center' }}>
-          Return Policy
-        </h1>
-        
-        <div style={{ lineHeight: 1.8, fontSize: '16px', color: 'var(--color-text)' }}>
-          <p style={{ marginBottom: 'var(--space-md)' }}>
-            At Galerie Varinchi, we take pride in the quality of our artwork. Hand-crafted pieces, personalized frames, and individually sourced items mean that each order is unique. Therefore, please carefully read our Return Policy below before making your purchase.
-          </p>
+    <div className="static-page fade-in">
+      <h1 className="heading-serif">Refund and Return Policy</h1>
+      <p className="text-muted" style={{ marginBottom: 'var(--space-lg)' }}>Effective Date: April 3, 2026</p>
 
-          <h2 style={{ fontSize: '24px', margin: 'var(--space-xl) 0 var(--space-md)' }}>1. General Returns</h2>
-          <p style={{ marginBottom: 'var(--space-md)' }}>
-            Due to the fragile and hand-crafted nature of our products, all sales are considered final. We do not accept returns or exchanges for a change of mind after the order has been successfully shipped or delivered.
-          </p>
+      <p>
+        At Galerie Varinchi, we take great care in creating and delivering our artworks and 
+        products. Due to the unique and often handmade nature of our pieces, our refund and 
+        return policy is designed to be fair while protecting the integrity of our work.
+      </p>
 
-          <h2 style={{ fontSize: '24px', margin: 'var(--space-xl) 0 var(--space-md)' }}>2. Damaged or Defective Items</h2>
-          <p style={{ marginBottom: 'var(--space-md)' }}>
-            If your artwork arrives damaged or defective, please contact us immediately upon receipt. We ask that you provide clear photographs of both the damaged product and its original packaging. Once we evaluate the photos and confirm the issue occurred prior to your receipt, we will arrange for a replacement or a suitable resolution.
-          </p>
-          <ul style={{ paddingLeft: '20px', marginBottom: 'var(--space-md)' }}>
-            <li>Claims must be made within 48 hours of delivery.</li>
-            <li>Maintain all original packaging materials.</li>
-          </ul>
+      <h2>1. No Returns Policy</h2>
+      <ul>
+        <li>All sales are final.</li>
+        <li>
+          We do not accept returns or exchanges unless the product is damaged or defective upon 
+          delivery.
+        </li>
+      </ul>
 
-          <h2 style={{ fontSize: '24px', margin: 'var(--space-xl) 0 var(--space-md)' }}>3. Cancellations</h2>
-          <p style={{ marginBottom: 'var(--space-md)' }}>
-            Orders can only be canceled within 12 hours of placement. Since many of our products are prepared to order (such as specifically sized frame cuts or specialized mediums), cancellation requests made after this window may not be honored if production has already commenced.
-          </p>
+      <h2>2. Damaged or Defective Products</h2>
+      <p>
+        If you receive a damaged or defective item, you are eligible for a replacement or refund. 
+        To process your request:
+      </p>
+      <ul>
+        <li>You must notify us within 48 hours of delivery.</li>
+        <li>Provide clear photos/videos showing the damaged product and the packaging.</li>
+        <li>Email us at <a href="mailto:galerievarinchi@gmail.com" style={{ color: 'var(--color-accent)' }}>galerievarinchi@gmail.com</a></li>
+      </ul>
+      <p>Once verified, we will:</p>
+      <ul>
+        <li>Offer a replacement (preferred), or</li>
+        <li>Issue a full refund if replacement is not possible.</li>
+      </ul>
 
-          <h2 style={{ fontSize: '24px', margin: 'var(--space-xl) 0 var(--space-md)' }}>4. Custom & Commissioned Art</h2>
-          <p style={{ marginBottom: 'var(--space-md)' }}>
-            Any commissioned or heavily customized items are strictly non-refundable and non-returnable once the design/creation process has been approved and started.
-          </p>
+      <h2>3. Refund Process</h2>
+      <ul>
+        <li>Approved refunds will be processed within 5&ndash;10 business days.</li>
+        <li>Refunds will be credited to the original payment method.</li>
+        <li>Processing time may vary depending on your bank or payment provider.</li>
+      </ul>
 
-          <h2 style={{ fontSize: '24px', margin: 'var(--space-xl) 0 var(--space-md)' }}>5. How to Initiate a Claim</h2>
-          <p style={{ marginBottom: 'var(--space-md)' }}>
-            To initiate a damage claim or to request a cancellation, please reach out to us via our <Link href="/contact" style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}>Contact Page</Link>. Our team will review your request and get back to you within 1-2 business days.
-          </p>
-        </div>
-      </div>
+      <h2>4. Order Cancellation</h2>
+      <ul>
+        <li>Orders can be cancelled within 24 hours of placing the order.</li>
+        <li>After this period, cancellations may not be possible as processing may have begun.</li>
+        <li>To cancel, contact us immediately at: <a href="mailto:galerievarinchi@gmail.com" style={{ color: 'var(--color-accent)' }}>galerievarinchi@gmail.com</a></li>
+      </ul>
+
+      <h2>5. Non-Eligible Cases</h2>
+      <p>We do not offer refunds or replacements in the following cases:</p>
+      <ul>
+        <li>Change of mind after purchase.</li>
+        <li>Minor variations in color, texture, or finish (as artworks may appear differently on screens).</li>
+        <li>Damage caused after delivery due to mishandling.</li>
+        <li>Incorrect address provided by the customer.</li>
+      </ul>
+
+      <h2>6. Shipping Damage Responsibility</h2>
+      <ul>
+        <li>If damage occurs during shipping, we will take full responsibility once verified.</li>
+        <li>Customers must retain original packaging for claim verification.</li>
+      </ul>
+
+      <h2>7. Contact Us</h2>
+      <p>For any refund or return-related queries, please contact:</p>
+      <p style={{ marginTop: 'var(--space-md)', fontWeight: 500 }}>
+        Galerie Varinchi<br />
+        Park Road, Kavilkadavu<br />
+        Kodungallur P.O, Thrissur<br />
+        Kerala, India<br /><br />
+        Email: <a href="mailto:galerievarinchi@gmail.com" style={{ color: 'var(--color-accent)' }}>galerievarinchi@gmail.com</a><br />
+        Phone: 7259644702
+      </p>
+
+      <h2>8. Policy Acceptance</h2>
+      <p>By purchasing from our website, you agree to this Refund and Return Policy.</p>
     </div>
   );
 }

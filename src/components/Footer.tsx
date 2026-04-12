@@ -20,6 +20,7 @@ export default function Footer() {
               <Link href="/privacy">Privacy Policy</Link>
               <Link href="/terms">Terms of Service</Link>
               <Link href="/return-policy">Return Policy</Link>
+              <Link href="/shipping-policy">Shipping Policy</Link>
               <Link href="/faq">FAQ</Link>
               <Link href="/artist/signup" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Join as Artist</Link>
             </div>
