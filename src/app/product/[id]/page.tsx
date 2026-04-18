@@ -60,6 +60,9 @@ export default function ProductPage() {
 
   const [quantity, setQuantity] = useState(1);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [questionText, setQuestionText] = useState('');
+  const [askingStatus, setAskingStatus] = useState<'idle'|'sending'|'sent'|'error'>('idle');
 
   useEffect(() => {
     fetch(`/api/products/${id}`)
@@ -182,6 +185,51 @@ export default function ProductPage() {
       await removeFromWishlist(product.id);
     } else {
       await addToWishlist(product.id, product.title, product.image);
+    }
+  };
+
+  const handleAskQuestion = async () => {
+    if (!user) {
+      router.push('/auth');
+      return;
+    }
+    if (!questionText.trim()) return;
+    setAskingStatus('sending');
+    const res = await fetch(`/api/products/${id}/question`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: questionText })
+    });
+    if (res.ok) {
+      setAskingStatus('sent');
+      setQuestionText('');
+      setTimeout(() => {
+        setShowQuestionModal(false);
+        setAskingStatus('idle');
+      }, 2000);
+    } else {
+      setAskingStatus('error');
+    }
+  };
+
+  const handleRequestCallback = async () => {
+    if (!user) {
+      router.push('/auth');
+      return;
+    }
+    setAskingStatus('sending');
+    const res = await fetch(`/api/products/${id}/callback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.ok) {
+      setAskingStatus('sent');
+      setTimeout(() => {
+        setShowQuestionModal(false);
+        setAskingStatus('idle');
+      }, 2000);
+    } else {
+      setAskingStatus('error');
     }
   };
 
@@ -346,6 +394,71 @@ export default function ProductPage() {
                 Sign in to save items to your wishlist
               </p>
             )}
+
+            <div style={{ marginTop: 'var(--space-xl)', borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-md)' }}>
+              {!showQuestionModal ? (
+                <button
+                  className="btn btn-secondary btn-full"
+                  onClick={() => {
+                    if (!user) {
+                      router.push('/auth');
+                    } else {
+                      setShowQuestionModal(true);
+                      setAskingStatus('idle');
+                    }
+                  }}
+                >
+                  Ask a Question about this Product
+                </button>
+              ) : (
+                <div style={{ background: 'var(--color-surface)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                  <h3 className="text-md" style={{ marginBottom: 'var(--space-sm)' }}>Ask a Question</h3>
+                  <textarea
+                    className="input"
+                    rows={4}
+                    placeholder="Type your question here..."
+                    value={questionText}
+                    onChange={(e) => setQuestionText(e.target.value)}
+                    style={{ marginBottom: 'var(--space-md)', width: '100%', resize: 'vertical' }}
+                    disabled={askingStatus === 'sending' || askingStatus === 'sent'}
+                  />
+                  
+                  <div style={{ display: 'flex', gap: 'var(--space-sm)', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ flex: 1 }}
+                        onClick={handleAskQuestion}
+                        disabled={askingStatus === 'sending' || askingStatus === 'sent' || !questionText.trim()}
+                      >
+                        {askingStatus === 'sending' ? 'Sending...' : askingStatus === 'sent' ? 'Sent!' : 'Send Question'}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ flex: 1 }}
+                        onClick={handleRequestCallback}
+                        disabled={askingStatus === 'sending' || askingStatus === 'sent'}
+                        title="If you have an urgent inquiry, request a callback from our team."
+                      >
+                        Request Callback
+                      </button>
+                    </div>
+                    {askingStatus === 'error' && (
+                      <p className="text-xs" style={{ color: 'var(--color-danger)', textAlign: 'center' }}>
+                        Something went wrong. Please try again.
+                      </p>
+                    )}
+                    <button
+                      className="text-xs text-muted"
+                      onClick={() => setShowQuestionModal(false)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 'var(--space-xs)', marginTop: 'var(--space-xs)' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

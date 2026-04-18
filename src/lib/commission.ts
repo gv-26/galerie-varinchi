@@ -1,14 +1,18 @@
-/**
- * Commission calculation engine for Galerie Varinchi.
- *
- * Rules:
- * - Artist earns 33% of sale price until cumulative artistShare reaches basePrice.
- * - After basePrice is reached, artist earns 7% as perpetual royalty.
- * - Handles the overflow edge case where a sale straddles both tiers.
- *
- * This function is pure and has no DB dependencies — easy to unit-test
- * and reusable from both the manual PATCH endpoint and future Razorpay webhook.
- */
+import { db } from '@/db';
+import * as schema from '@/db/schema';
+import { eq, sql } from 'drizzle-orm';
+
+// ---------------------------------------------------------------------------
+// Pure Commission Calculation Engine
+//
+// Rules:
+//   - Artist earns 33% of sale price until cumulative artistShare reaches basePrice.
+//   - After basePrice is reached, artist earns 7% as a perpetual royalty.
+//   - Handles the overflow edge case where a sale straddles both tiers.
+//
+// This function is pure with no DB dependencies — easy to unit-test and safe
+// to call from any context (API handler, cron job, webhook).
+// ---------------------------------------------------------------------------
 
 export type CommissionResult = {
   artistShare: number;
@@ -22,10 +26,9 @@ export function calculateArtistPayout(
   currentTotalCommissionPaid: number
 ): CommissionResult {
   const round2 = (n: number) => Math.round(n * 100) / 100;
-
   const remaining = basePrice - currentTotalCommissionPaid;
 
-  // Pure royalty — base price already hit
+  // Pure royalty — base price already recouped
   if (remaining <= 0) {
     const share = round2(salePrice * 0.07);
     return {
@@ -46,50 +49,46 @@ export function calculateArtistPayout(
     };
   }
 
-  // Overflow: split the sale across both tiers
-  // The portion of salePrice that earns at 33% to exactly hit basePrice:
-  // portiontAtInitial * 0.33 = remaining  →  portionAtInitial = remaining / 0.33
+  // Overflow: split the sale across both tiers.
+  // portionAtInitial * 0.33 = remaining  →  portionAtInitial = remaining / 0.33
   const portionAtInitial = remaining / 0.33;
   const portionAtRoyalty = salePrice - portionAtInitial;
-
   const initialShare = remaining; // exactly fills the gap
   const royaltyShare = round2(portionAtRoyalty * 0.07);
-  const totalShare = round2(initialShare + royaltyShare);
 
   return {
-    artistShare: totalShare,
-    commissionType: 'MIXED', // stored as INITIAL_33, but a note could be added
-    newTotalCommissionPaid: round2(currentTotalCommissionPaid + totalShare),
+    artistShare: round2(initialShare + royaltyShare),
+    commissionType: 'MIXED',
+    newTotalCommissionPaid: round2(currentTotalCommissionPaid + initialShare + royaltyShare),
   };
 }
 
-/**
- * processCommissionForOrder — called after an order is marked PAID.
- * Designed as a standalone function so it can be called from:
- *   - Admin PATCH /orders/{id} (current flow)
- *   - Future Razorpay webhook handler
- */
-import { db } from '@/db';
-import * as schema from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+// ---------------------------------------------------------------------------
+// DB-level Commission Processing
+//
+// Called after an order is marked PAID. Designed as a standalone function so
+// it can be invoked from the order creation handler, a webhook, or an admin
+// manual trigger without duplication.
+// ---------------------------------------------------------------------------
 
 export async function processCommissionForOrder(orderId: string): Promise<void> {
-  // Fetch all items in this order, with product & its artist
   const orderItems = await db.query.orderItem.findMany({
     where: eq(schema.orderItem.orderId, orderId),
     with: {
-      product: {
-        with: { artistProfile: true }
-      }
-    }
+      product: { with: { artistProfile: true } },
+    },
   });
 
   for (const item of orderItems) {
     const product = item.product;
+
     if (!product?.artistProfileId || !product.artistProfile) {
-      console.warn(`[COMMISSION] Skipping item ${item.id} (Product: ${product?.title || 'Unknown'})`);
-      console.warn(` - product.artistProfileId: ${product?.artistProfileId}`);
-      console.warn(` - product.artistProfile: ${product?.artistProfile ? 'Exists' : 'MISSING (Relation failed)'}`);
+      console.warn('[COMMISSION] Skipping item — no artist linked', {
+        itemId: item.id,
+        productId: product?.id,
+        productTitle: product?.title,
+        hasArtistProfileId: !!product?.artistProfileId,
+      });
       continue;
     }
 
@@ -114,8 +113,9 @@ export async function processCommissionForOrder(orderId: string): Promise<void> 
       releaseAt,
     });
 
-    // 2. Upsert artist wallet — add to pendingBalance
-    await db.insert(schema.artistWallet)
+    // 2. Upsert artist wallet — credit pendingBalance
+    await db
+      .insert(schema.artistWallet)
       .values({
         id: crypto.randomUUID(),
         artistId: product.artistProfileId,
@@ -128,11 +128,12 @@ export async function processCommissionForOrder(orderId: string): Promise<void> 
         set: {
           pendingBalance: sql`"ArtistWallet"."pendingBalance" + ${artistShare}`,
           updatedAt: new Date().toISOString(),
-        }
+        },
       });
 
     // 3. Update product's cumulative commission tracking
-    await db.update(schema.product)
+    await db
+      .update(schema.product)
       .set({ totalCommissionPaid: newTotalCommissionPaid })
       .where(eq(schema.product.id, product.id));
   }

@@ -1,5 +1,5 @@
 import { pgTable, uniqueIndex, text, integer, timestamp, foreignKey, boolean, doublePrecision } from "drizzle-orm/pg-core"
-import { sql, relations } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 
 
 

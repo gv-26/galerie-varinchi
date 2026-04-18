@@ -148,3 +148,92 @@ export async function sendArtworkSubmissionEmail(artistName: string, artworkTitl
     `
   );
 }
+
+export async function sendProductQuestionEmail(productTitle: string, userEmail: string, userName: string | null, questionText: string): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [ADMIN NOTIFY] Product Question for "${productTitle}" by ${userEmail}`);
+    console.log(`  Question: ${questionText}`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    ADMIN_EMAIL,
+    `Product Question: ${productTitle}`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">A customer has asked a question about a product.</p>
+        <p style="color: #666; font-size: 14px;">Product: <strong>${productTitle}</strong></p>
+        <p style="color: #666; font-size: 14px;">Customer: <strong>${userName || 'User'} (${userEmail})</strong></p>
+        <p style="color: #666; font-size: 14px; margin-top: 16px;"><strong>Question:</strong></p>
+        <p style="color: #333; font-size: 14px; white-space: pre-wrap;">${questionText}</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      </div>
+    `
+  );
+}
+
+export async function sendProductCallbackEmail(productTitle: string, userEmail: string, userName: string | null, userPhone: string | null): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [ADMIN NOTIFY] Callback Request for "${productTitle}" by ${userEmail}`);
+    console.log(`  Phone: ${userPhone}`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    ADMIN_EMAIL,
+    `Callback Request: ${productTitle}`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">A customer has requested a callback for a product.</p>
+        <p style="color: #666; font-size: 14px;">Product: <strong>${productTitle}</strong></p>
+        <p style="color: #666; font-size: 14px;">Customer: <strong>${userName || 'User'} (${userEmail})</strong></p>
+        <p style="color: #666; font-size: 14px;">Phone Number: <strong>${userPhone || 'Not provided'}</strong></p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">Please reach out to the customer as soon as possible.</p>
+      </div>
+    `
+  );
+}
+
+export async function sendContactEmail({
+  name,
+  email,
+  subject,
+  message,
+}: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}): Promise<void> {
+  await sendEmail(
+    ADMIN_EMAIL,
+    `Contact Form: ${subject || 'New Message'} — from ${name}`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">A visitor submitted the contact form.</p>
+        <p style="color: #666; font-size: 14px;"><strong>Name:</strong> ${name}</p>
+        <p style="color: #666; font-size: 14px;"><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+        ${subject ? `<p style="color: #666; font-size: 14px;"><strong>Subject:</strong> ${subject}</p>` : ''}
+        <div style="margin-top: 16px; padding: 16px; background: #f9f9f9; border-radius: 4px;">
+          <p style="color: #333; font-size: 14px; white-space: pre-wrap;">${message}</p>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">Reply directly to this sender at ${email}.</p>
+      </div>
+    `
+  );
+}
+

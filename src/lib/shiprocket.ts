@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic';
 
 let shiprocketToken: string | null = null;
 let tokenExpiresAt: number = 0;

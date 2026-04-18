@@ -6,7 +6,7 @@ import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, and, ne, desc, sql, inArray, lt, gte } from 'drizzle-orm';
 import { createToken, getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth';
-import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail } from '@/lib/email';
+import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail, sendProductQuestionEmail, sendProductCallbackEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { processCommissionForOrder } from '@/lib/commission';
@@ -25,16 +25,25 @@ async function getS3Client() {
   return s3Client;
 }
 
+// Sanitizes a raw string before JSON.parse — strips null bytes and removes
+// incomplete unicode escape sequences (e.g. `\u0` that aren't followed by 4 hex digits).
+// These are a common source of "Unexpected token '\'" SyntaxErrors in the RSC layer.
+const sanitizeJsonString = (str: string): string => {
+  return str
+    .replace(/\u0000/g, '')                    // strip null bytes (binary 0x00)
+    .replace(/\\u(?![0-9a-fA-F]{4})/g, '');   // remove incomplete \uXXXX escapes
+};
+
 // Helper for safe JSON parsing of product images
 // Helper to recursively parse JSON if it's multi-stringified
 const deepParse = (val: any): any => {
   if (!val || typeof val !== 'string') return val;
   try {
-    let current = val;
+    let current = sanitizeJsonString(val);
     for (let i = 0; i < 5; i++) {
        const parsed = JSON.parse(current);
        if (typeof parsed === 'string') {
-         current = parsed;
+         current = sanitizeJsonString(parsed);
          continue;
        }
        // Special case: Single key containing JSON (product data corruption fix)
@@ -490,6 +499,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // --- JSON Handlers ---
     const body = await request.json().catch(() => ({}));
+
+    // 0. Product Questions and Callbacks
+    if (action[0] === 'products' && action[2] === 'question' && user) {
+      const pId = action[1];
+      const { text } = body;
+      const p = await db.query.product.findFirst({ where: eq(schema.product.id, pId) });
+      if (!p) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+      await sendProductQuestionEmail(p.title, user.email, user.name, text);
+      return NextResponse.json({ success: true });
+    }
+
+    if (action[0] === 'products' && action[2] === 'callback' && user) {
+      const pId = action[1];
+      const p = await db.query.product.findFirst({ where: eq(schema.product.id, pId) });
+      if (!p) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+      await sendProductCallbackEmail(p.title, user.email, user.name, user.phone);
+      return NextResponse.json({ success: true });
+    }
 
     // 1. Generate Presigned URL for Direct S3 Uploads (solves OpenNext multipart crash)
     if (action[0] === 'upload' && action[1] === 'presigned') {
