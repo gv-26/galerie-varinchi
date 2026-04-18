@@ -25,6 +25,10 @@ interface Order {
   createdAt: string;
   items: OrderItem[];
   discountAmount?: number | null;
+  awbNumber?: string | null;
+  courierName?: string | null;
+  shippingStatus?: string | null;
+  trackingUrl?: string | null;
 }
 
 const TABS = [
@@ -254,7 +258,7 @@ export default function OrdersPage() {
                   <th>Details</th>
                   <th>Customer</th>
                   <th>Amount</th>
-                  <th>Transaction ID</th>
+                  <th>Logistics</th>
                 </tr>
               </thead>
               <tbody>
@@ -314,8 +318,36 @@ export default function OrdersPage() {
                           </>
                         )}
                       </td>
-                      <td className="text-xs" style={{ fontFamily: 'monospace, sans-serif' }}>
-                        {idx === 0 ? (order.transactionId || '—') : ''}
+                      <td className="text-sm">
+                        {idx === 0 && (
+                          <div>
+                            {order.awbNumber ? (
+                              <>
+                                <div style={{ fontWeight: 600 }}>{order.courierName}</div>
+                                <div className="text-xs text-muted" style={{ fontFamily: 'monospace' }}>AWB: {order.awbNumber}</div>
+                                <div className="text-xs text-muted" style={{ marginTop: '2px', textTransform: 'uppercase' }}>
+                                  <span style={{ 
+                                    padding: '2px 4px', 
+                                    borderRadius: '4px', 
+                                    background: order.shippingStatus === 'DELIVERED' ? '#d4edda' : '#e2e3e5',
+                                    color: order.shippingStatus === 'DELIVERED' ? '#155724' : '#383d41'
+                                  }}>
+                                    {order.shippingStatus || 'PENDING'}
+                                  </span>
+                                </div>
+                                {order.trackingUrl && (
+                                  <div style={{ marginTop: '4px' }}>
+                                    <a href={order.trackingUrl} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: 'var(--color-accent)' }}>
+                                      Track Order
+                                    </a>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-muted text-xs">Unassigned</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

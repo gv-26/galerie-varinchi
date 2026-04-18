@@ -189,6 +189,12 @@ function AddProductContent() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [artistProfileId, setArtistProfileId] = useState('');
 
+  // Shipping metrics
+  const [weight, setWeight] = useState('');
+  const [length, setLength] = useState('');
+  const [width, setWidth] = useState('');
+  const [height, setHeight] = useState('');
+
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(data => {
       setCategories(data);
@@ -396,6 +402,10 @@ function AddProductContent() {
       unitsAvailable: hasUnits ? (parseInt(unitsAvailable) || 0) : null,
       requestId: requestId || undefined,
       artistProfileId: artistProfileId || null,
+      weight: parseFloat(weight) || undefined,
+      length: parseFloat(length) || undefined,
+      width: parseFloat(width) || undefined,
+      height: parseFloat(height) || undefined,
     };
 
     try {
@@ -918,6 +928,30 @@ function AddProductContent() {
                 </div>
               </div>
             )}
+
+            {/* ── Shipping & Dimensions ── */}
+            <div className="profile-card">
+              <h3>Shipping Metrics</h3>
+              <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>Required for automated courier assignment and accurate shipping rates.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-md)' }}>
+                <div className="form-group">
+                  <label>Weight (kg)</label>
+                  <input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.5" />
+                </div>
+                <div className="form-group">
+                  <label>Length (cm)</label>
+                  <input type="number" step="1" value={length} onChange={e => setLength(e.target.value)} placeholder="30" />
+                </div>
+                <div className="form-group">
+                  <label>Width (cm)</label>
+                  <input type="number" step="1" value={width} onChange={e => setWidth(e.target.value)} placeholder="20" />
+                </div>
+                <div className="form-group">
+                  <label>Height (cm)</label>
+                  <input type="number" step="1" value={height} onChange={e => setHeight(e.target.value)} placeholder="5" />
+                </div>
+              </div>
+            </div>
 
             {/* ── Inventory ── */}
             <div className="profile-card">

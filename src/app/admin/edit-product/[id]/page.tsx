@@ -58,6 +58,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [hasUnits, setHasUnits] = useState(false);
   const [unitsAvailable, setUnitsAvailable] = useState('');
 
+  // Shipping metrics
+  const [weight, setWeight] = useState('');
+  const [length, setLength] = useState('');
+  const [width, setWidth] = useState('');
+  const [height, setHeight] = useState('');
+
   // Load categories + product data
   useEffect(() => {
     Promise.all([
@@ -79,6 +85,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       setStatus(product.status || 'active');
       setUnitsAvailable(product.unitsAvailable?.toString() || '');
       setHasUnits(product.unitsAvailable != null && product.unitsAvailable > 0);
+      setWeight(product.weight?.toString() || '');
+      setLength(product.length?.toString() || '');
+      setWidth(product.width?.toString() || '');
+      setHeight(product.height?.toString() || '');
 
       // Set images
       const imgs = Array.isArray(product.images) ? product.images : [];
@@ -250,6 +260,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       priceModifiers: JSON.stringify(finalPrices),
       unitsAvailable: hasUnits ? (parseInt(unitsAvailable) || 0) : null,
       status,
+      weight: parseFloat(weight) || undefined,
+      length: parseFloat(length) || undefined,
+      width: parseFloat(width) || undefined,
+      height: parseFloat(height) || undefined,
     };
 
     try {
@@ -427,6 +441,28 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
           )}
+
+          <div className="profile-card">
+            <h3>Shipping Metrics</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-md)' }}>
+              <div className="form-group">
+                <label>Weight (kg)</label>
+                <input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>Length (cm)</label>
+                <input type="number" step="1" value={length} onChange={e => setLength(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>Width (cm)</label>
+                <input type="number" step="1" value={width} onChange={e => setWidth(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>Height (cm)</label>
+                <input type="number" step="1" value={height} onChange={e => setHeight(e.target.value)} />
+              </div>
+            </div>
+          </div>
 
           <div className="profile-card">
             <h3>Inventory</h3>

@@ -55,6 +55,10 @@ export const product = pgTable("Product", {
 	priceModifiers: text().default('{}').notNull(),
 	unitsAvailable: integer(),
 	totalCommissionPaid: doublePrecision().default(0).notNull(),
+	weight: doublePrecision(),
+	length: doublePrecision(),
+	width: doublePrecision(),
+	height: doublePrecision(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
 	foreignKey({
@@ -117,6 +121,13 @@ export const order = pgTable("Order", {
 	customerAddress: text(),
 	couponId: text(),
 	discountAmount: doublePrecision(),
+	shiprocketOrderId: integer(),
+	shiprocketShipmentId: integer(),
+	awbNumber: text(),
+	courierName: text(),
+	courierId: integer(),
+	shippingStatus: text().default('PENDING'),
+	trackingUrl: text(),
 	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
 	foreignKey({

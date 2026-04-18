@@ -11,6 +11,7 @@ import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { processCommissionForOrder } from '@/lib/commission';
 import crypto from 'crypto';
+import { createShiprocketOrder, assignAWB, schedulePickup } from '@/lib/shiprocket';
 
 
 let s3Client: any = null;
@@ -902,12 +903,63 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       await sendOrderConfirmationEmail(user.email, order.id, order.totalAmount);
       
-      // Every new order is already paid (payment confirmed at checkout).
-      // We MUST await this in serverless/Lambda environments to ensure it completes.
       try {
         await processCommissionForOrder(order.id);
       } catch (err) {
         console.error('Commission processing error for order', order.id, err);
+      }
+
+      // Shiprocket Integration
+      try {
+        const srItems = [];
+        for (const item of body.items) {
+          const p = await db.query.product.findFirst({ where: eq(schema.product.id, item.productId) });
+          if (p) {
+            srItems.push({
+              name: p.title,
+              sku: p.id.substring(0, 8),
+              units: item.quantity,
+              selling_price: item.price,
+              weight: p.weight || 0.5,
+              length: p.length || 10,
+              width: p.width || 10,
+              height: p.height || 10
+            });
+          }
+        }
+
+        const srOrder = await createShiprocketOrder({
+          orderId: order.id,
+          orderDate: new Date().toISOString(),
+          customerName: user.name || 'Customer',
+          customerEmail: user.email,
+          customerPhone: user.phone || '9999999999',
+          customerAddress: user.address || 'India',
+          subTotal: subtotal,
+          items: srItems
+        });
+
+        let awbNumber = null;
+        let courierName = null;
+        let courierId = null;
+        const awbData = await assignAWB(srOrder.shipmentId);
+        if (awbData) {
+          awbNumber = awbData.awbNumber;
+          courierName = awbData.courierName;
+          courierId = awbData.courierId;
+          await schedulePickup(srOrder.shipmentId);
+        }
+
+        await db.update(schema.order).set({
+          shiprocketOrderId: srOrder.shiprocketOrderId,
+          shiprocketShipmentId: srOrder.shipmentId,
+          awbNumber,
+          courierName,
+          courierId,
+          shippingStatus: awbNumber ? 'LABEL_GENERATED' : 'PENDING'
+        }).where(eq(schema.order.id, order.id));
+      } catch (err) {
+        console.error('Shiprocket creation error for order', order.id, err);
       }
       
       return NextResponse.json({ order });

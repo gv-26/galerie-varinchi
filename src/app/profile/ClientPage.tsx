@@ -11,6 +11,10 @@ interface Order {
   totalAmount: number;
   createdAt: string;
   items: { product: { title: string }; quantity: number }[];
+  awbNumber?: string | null;
+  courierName?: string | null;
+  shippingStatus?: string | null;
+  trackingUrl?: string | null;
 }
 
 export default function ProfilePage() {
@@ -196,10 +200,25 @@ export default function ProfilePage() {
                       {STATUS_LABELS[order.status]}
                     </span>
                   </div>
-                   <p className="text-sm text-muted">
+                   <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-xs)' }}>
                     {(order?.items || []).map(item => `${item?.product?.title || 'Unknown Product'} × ${item?.quantity || 0}`).join(', ')}
                   </p>
-                  <p className="text-sm" style={{ fontWeight: 500 }}>₹{order.totalAmount.toLocaleString()}</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p className="text-sm" style={{ fontWeight: 500, margin: 0 }}>₹{order.totalAmount.toLocaleString()}</p>
+                    {order.awbNumber && (
+                      <div className="text-xs" style={{ textAlign: 'right' }}>
+                        <span className="text-muted">{order.courierName} - AWB: {order.awbNumber}</span>
+                        <div style={{ fontWeight: 600, display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', marginTop: '2px' }}>
+                          <span style={{ color: order.shippingStatus === 'DELIVERED' ? 'var(--color-success)' : 'var(--color-text)' }}>
+                            {order.shippingStatus || 'PENDING'}
+                          </span>
+                          {order.trackingUrl && (
+                            <a href={order.trackingUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>Track</a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
 
