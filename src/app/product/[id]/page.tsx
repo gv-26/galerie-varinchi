@@ -44,7 +44,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function ProductPage() {
   const router = useRouter();
   const { id } = useParams();
-  const { addToCart } = useCart();
+  const { items, addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isWishlisted } = useWishlist();
   const { user } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
@@ -314,13 +314,23 @@ export default function ProductPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-xl)' }}>
-              <button
-                className={`btn ${addedToCart ? 'btn-accent' : 'btn-primary'} btn-full`}
-                onClick={handleAddToCart}
-                disabled={product.unitsAvailable !== null && product.unitsAvailable === 0}
-              >
-                {addedToCart ? '✓ Added to Cart' : 'Add to Cart'}
-              </button>
+              <div style={{ display: 'flex', gap: 'var(--space-md)', flex: 1 }}>
+                <button
+                  className={`btn ${addedToCart ? 'btn-accent' : 'btn-primary'} btn-full`}
+                  style={{ flex: 1 }}
+                  onClick={handleAddToCart}
+                  disabled={product.unitsAvailable !== null && product.unitsAvailable === 0}
+                >
+                  {addedToCart ? '✓ Added to Cart' : 'Add to Cart'}
+                </button>
+                {items && items.length > 0 && (
+                  <Link href="/cart" style={{ flex: 1, textDecoration: 'none' }}>
+                    <button className="btn btn-secondary btn-full" style={{ width: '100%', height: '100%' }}>
+                      Checkout
+                    </button>
+                  </Link>
+                )}
+              </div>
               <button
                 className={`btn btn-secondary`}
                 onClick={handleWishlistToggle}

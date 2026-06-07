@@ -5,123 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import jsPDF from 'jspdf';
 import { resizeImage } from '@/lib/image-utils';
+import { ARTIST_AGREEMENT_TEXT, GV_LOGO_BASE64, GV_SIGNATURE_BASE64 } from '@/constants/agreement';
 
 const ARTIST_AGREEMENT_VERSION = 'v1.0';
-const ARTIST_AGREEMENT_TEXT = `GALERIE VARINCHI — ARTIST COLLABORATION TERMS AND CONDITIONS
-
-Effective Date: April 3, 2026
-Version ${ARTIST_AGREEMENT_VERSION}
-
-These Terms and Conditions govern the collaboration between Galerie Varinchi ("the Platform") and the Artist whose artworks are licensed for reproduction and sale through the Galerie Varinchi platform. By entering into collaboration with Galerie Varinchi, the Artist agrees to the following terms.
-
-1. DEFINITIONS
-
-Artist: The creator and copyright holder of the artwork licensed to Galerie Varinchi.
-Artwork: Any digital artwork, illustration, painting, photograph, or visual work submitted by the Artist for reproduction and sale.
-Artist Base Value (X): The original price assigned to the artwork by the Artist.
-Retail Price (Y): The final selling price of the artwork to customers, excluding Goods and Services Tax (GST).
-Net Revenue: The retail selling price excluding GST.
-
-2. NATURE OF COLLABORATION
-
-The Artist grants Galerie Varinchi a non-exclusive license to reproduce selected artworks as curated prints and sell them through the Galerie Varinchi platform. This collaboration allows the Artist to monetize their artwork while Galerie Varinchi manages production, logistics, and sales operations.
-
-3. OWNERSHIP & COPYRIGHT
-
-All artworks remain the intellectual property of the Artist. The Artist retains:
-- Full copyright ownership
-- Moral rights associated with the artwork
-- The right to sell original artworks
-- The right to license the artwork to other parties
-
-Galerie Varinchi receives only the limited rights necessary to reproduce and sell prints of the artwork under the agreed licensing terms.
-
-Exclusions: Some prints are made under special request exclusively for Galerie Varinchi and will be sold as limited edition prints. They will be exclusive, sold limited in numbers, and should not be available through any other channels to maintain uniqueness.
-
-4. LICENSING RIGHTS
-
-The Artist grants Galerie Varinchi the right to:
-- Reproduce the artwork as printed editions
-- Display the artwork on the Galerie Varinchi website and marketing materials
-- Sell the printed artwork to customers through official Galerie Varinchi sales channels
-
-This license is non-exclusive, meaning the Artist may continue to sell or license the artwork elsewhere. However, some selected limited edition prints released through the platform may be exclusive to Galerie Varinchi and will not be made available for sale through other channels.
-
-5. USAGE LIMITATIONS
-
-5.1 Print Reproduction Only: The artwork may be reproduced only for the purpose of producing and selling art prints through the Galerie Varinchi platform. The artwork will not be used for merchandise such as clothing or home decor unrelated to prints without explicit written permission.
-5.2 No Unauthorized Modification: Galerie Varinchi will not alter the artwork in a manner that changes its artistic integrity. Permitted adjustments include resizing, color correction for print accuracy, and cropping for standard ratios.
-5.3 No Third-Party Licensing: Galerie Varinchi will not sublicense or distribute the artwork to third-party marketplaces without the Artist's written consent.
-5.4 Marketing Use: Galerie Varinchi may use the artwork images for website display, social media, and marketing campaigns to promote the artwork and the platform.
-
-6. ROYALTY STRUCTURE
-
-6.1 Digital Artworks (Art print reproduction)
-Royalty payments are calculated based on Net Revenue (Retail Price excluding GST).
-Artist Base Value (X): Decided by Artist during submission. Final listing price is determined by Galerie Varinchi (adding framing, packaging, shipping, margin, etc.).
-
-Phase 1 — Initial Royalty Recovery: For each sale, the Artist receives 33% of Net Revenue (excluding GST). This continues until total royalty paid equals the Artist Base Value (X).
-Phase 2 — Ongoing Royalty: Once cumulative royalties reach the Artist Base Value (X), the Artist will receive 7% of Net Revenue (excluding GST) for as long as the artwork remains available.
-
-6.2 Handmade Artworks (Single piece)
-Artist Base Value (X) decided by the Artist will be paid upon sale. Product photoshoot must be done before listing; product must be handed over to Galerie Varinchi for Photoshoot.
-
-6.3 Payment Schedule
-Royalty payout is done monthly. It takes up to 18 days for royalty to be credited to the Artist’s wallet after each sale (to account for the return window). If a return occurs, the royalty for that particular sale will be cancelled.
-
-7. PRODUCTION & FULFILMENT
-
-Galerie Varinchi manages the entire process: fine art printing, framing, packaging, order processing, shipping, and customer support. Artists are not required to manage operational aspects of fulfilment.
-
-8. SALES REPORTING & PAYMENTS
-
-Galerie Varinchi will maintain records of all artwork sales. Artists will receive periodic royalty statements and payments according to the agreed payment cycle.
-
-9. ARTIST RESPONSIBILITIES
-
-The Artist agrees to:
-- Provide high-resolution artwork files suitable for printing.
-- Confirm they hold full rights to the artwork and do not infringe on third-party copyrights.
-- Provide accurate information regarding the artwork.
-The Artist is responsible for any legal claims arising from ownership disputes.
-
-10. QUALITY & FILE REQUIREMENTS
-
-Artists must provide files suitable for professional printing (high-resolution, correct color profiles, adequate dimensions). Galerie Varinchi may request revised files if standards are not met.
-
-11. ARTIST PROMOTION
-
-Promotion of Artists will be done by Galerie Varinchi through web and social channels. Artist grants permission for using their photographs, bio, and process videos/photos for promotional purposes.
-
-12. ARTIST EXIT POLICY
-
-An Artist may terminate collaboration with written notice. Upon termination:
-- The Artist's profile may be removed.
-- No new listings will be created.
-- Existing orders placed prior to termination will be fulfilled.
-
-13. ARTWORK WITHDRAWAL POLICY
-
-Artists may request removal of specific artworks. Withdrawal stops new sales, but existing orders will be fulfilled. Previously sold artworks remain valid collectible prints.
-
-14. PLATFORM RIGHTS TO REMOVE ARTWORK
-
-Galerie Varinchi reserves the right to remove artwork for legal violations, copyright disputes, or failure to meet platform standards.
-
-15. LIMITATION OF LIABILITY
-
-Galerie Varinchi is not liable for market performance, sales volume, or external disruptions affecting production/shipping.
-
-16. AMENDMENTS TO TERMS
-
-Galerie Varinchi may update these Terms when necessary. Artists will be notified of significant changes.
-
-17. GOVERNING LAW
-
-These Terms shall be governed by the laws of India. Any disputes shall fall under the jurisdiction of the appropriate courts in India.
-
-By checking the box below, typing your full legal name, and submitting this form, you acknowledge that you have read, understood, and agree to be bound by the terms and conditions of this Artist Collaboration Agreement.
-`;
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -164,7 +50,9 @@ export default function ArtistSignUpPage() {
   // T&C state
   const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [digitalSignature, setDigitalSignature] = useState('');
+  const [signatureImage, setSignatureImage] = useState<File | null>(null);
+  const [signaturePreview, setSignaturePreview] = useState('');
+  const signatureInputRef = useRef<HTMLInputElement>(null);
   const [userIp, setUserIp] = useState('');
   const tcContainerRef = useRef<HTMLDivElement>(null);
 
@@ -218,7 +106,27 @@ export default function ArtistSignUpPage() {
     if (atBottom) setHasScrolledToEnd(true);
   };
 
-  const signatureMatches = digitalSignature.trim().toLowerCase() === fullName.trim().toLowerCase();
+  const handleSignaturePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.match(/^image\/(jpeg|png|jpg)$/)) {
+        setError('Signature must be a JPG or PNG image.');
+        return;
+      }
+      setLoading(true);
+      try {
+        const finalFile = await resizeImage(file);
+        setSignatureImage(finalFile);
+        const url = URL.createObjectURL(finalFile);
+        setSignaturePreview(url);
+        setError('');
+      } catch (err) {
+        setError('Failed to process signature image. Please try another one.');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   const handleProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -254,24 +162,105 @@ export default function ArtistSignUpPage() {
     if (files.length === 0) missing.push('Example Artworks (at least one file)');
     if (!hasScrolledToEnd) missing.push('Read the full Artist Agreement (scroll to the bottom)');
     if (!agreedToTerms) missing.push('Agree to the Artist Agreement');
-    if (!digitalSignature.trim()) missing.push('Digital Signature');
-    else if (!signatureMatches) missing.push('Digital Signature must match your Full Name');
+    if (!signatureImage) missing.push('Physical Signature Image');
     return missing;
   };
 
   const canSubmit = getMissingFields().length === 0;
 
   // --- Download agreement as PDF (print-friendly) ---
-  const handleDownloadAgreement = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html><head><title>Artist Agreement - Galerie Varinchi</title>
-      <style>body { font-family: 'Georgia', serif; max-width: 700px; margin: 40px auto; padding: 20px; line-height: 1.8; color: #222; white-space: pre-wrap; } h1 { text-align: center; font-size: 20px; }</style>
-      </head><body>${ARTIST_AGREEMENT_TEXT.replace(/\n/g, '<br/>')}</body></html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+  const generateAgreementPDF = async () => {
+    const doc = new jsPDF({ format: 'a4', unit: 'pt' });
+    const margin = 40;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const textWidth = pageWidth - (margin * 2);
+
+    let y = margin;
+
+    // Logo
+    if (GV_LOGO_BASE64) {
+      try {
+        doc.addImage(`data:image/jpeg;base64,${GV_LOGO_BASE64}`, 'JPEG', (pageWidth - 100) / 2, y, 100, 40);
+        y += 60;
+      } catch (e) { console.error('Logo add error', e); }
+    }
+
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ARTIST COLLABORATION AGREEMENT', pageWidth / 2, y, { align: 'center' });
+    y += 40;
+
+    doc.setFontSize(9);
+    doc.setFont('times', 'normal');
+    const lines = doc.splitTextToSize(ARTIST_AGREEMENT_TEXT, textWidth);
+    for (const line of lines) {
+      if (y > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, margin, y);
+      y += 12;
+    }
+
+    // Signature section
+    y += 40;
+    if (y > pageHeight - 180) {
+      doc.addPage();
+      y = margin;
+    }
+
+    const colWidth = textWidth / 2;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Artist', margin, y);
+    doc.text('Galerie Varinchi', margin + colWidth, y);
+    y += 20;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Name: ${fullName}`, margin, y);
+    doc.text('Name: Nikhil George', margin + colWidth, y);
+    y += 20;
+
+    // Artist Signature
+    if (signaturePreview) {
+      try {
+        doc.addImage(signaturePreview, 'PNG', margin, y, 100, 40);
+      } catch (e) { doc.text('[Signature Uploaded]', margin, y + 20); }
+    }
+
+    // GV Signature
+    if (GV_SIGNATURE_BASE64) {
+      try {
+        doc.addImage(`data:image/jpeg;base64,${GV_SIGNATURE_BASE64}`, 'JPEG', margin + colWidth, y, 100, 40);
+      } catch (e) { doc.text('[Signature]', margin + colWidth, y + 20); }
+    }
+
+    y += 50;
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, y);
+    doc.text('Date: May 3 - 2026', margin + colWidth, y);
+    y += 20;
+    doc.setFontSize(8);
+    doc.text(`IP: ${userIp}`, margin, y);
+
+    return doc;
+  };
+
+  const handleDownloadAgreement = async () => {
+    if (!fullName || !signatureImage) {
+      setError('Please provide your name and signature before downloading.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const doc = await generateAgreementPDF();
+      doc.save(`Galerie_Varinchi_Artist_Agreement_${fullName.replace(/\s+/g, '_')}.pdf`);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to generate PDF download.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSendOtp = async (e: React.FormEvent) => {
@@ -352,50 +341,7 @@ export default function ArtistSignUpPage() {
       // 2. Generate PDF of the Agreement
       let agreementPdfUrl = null;
       try {
-        const doc = new jsPDF({ format: 'a4', unit: 'pt' });
-        const margin = 40;
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const textWidth = pageWidth - margin * 2;
-        
-        let y = margin;
-        doc.setFontSize(22);
-        doc.setFont('helvetica', 'bold');
-        doc.text('GALERIE VARINCHI', pageWidth / 2, y, { align: 'center' });
-        y += 30;
-        doc.setFontSize(16);
-        doc.text('ARTIST AGREEMENT', pageWidth / 2, y, { align: 'center' });
-        y += 40;
-        
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        
-        // Auto-wrap the long text
-        const lines = doc.splitTextToSize(ARTIST_AGREEMENT_TEXT, textWidth);
-        for (const line of lines) {
-          if (y > doc.internal.pageSize.getHeight() - margin) {
-            doc.addPage();
-            y = margin;
-          }
-          doc.text(line, margin, y);
-          y += 14;
-        }
-        
-        y += 40;
-        if (y > doc.internal.pageSize.getHeight() - 100) {
-          doc.addPage();
-          y = margin;
-        }
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('AGREEMENT SIGNATURE', margin, y);
-        y += 20;
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Digital Signature: ${digitalSignature}`, margin, y);
-        y += 20;
-        doc.text(`Date & Time: ${new Date().toLocaleString()}`, margin, y);
-        y += 20;
-        doc.text(`IP Address: ${userIp}`, margin, y);
-        
+        const doc = await generateAgreementPDF();
         const pdfBlob = doc.output('blob');
         const pdfFile = new File([pdfBlob], `agreement-${Date.now()}.pdf`, { type: 'application/pdf' });
         agreementPdfUrl = await uploadToS3Presigned(pdfFile);
@@ -403,10 +349,15 @@ export default function ArtistSignUpPage() {
         console.error('Failed to generate or upload PDF', pdfErr);
       }
 
-      // 3. Upload Profile Photo directly to S3
+      // 3. Upload Profile Photo and Signature Image to S3
       let profilePhotoUrl = null;
       if (profilePhoto) {
         profilePhotoUrl = await uploadToS3Presigned(profilePhoto);
+      }
+
+      let signatureImageUrl = null;
+      if (signatureImage) {
+        signatureImageUrl = await uploadToS3Presigned(signatureImage);
       }
 
       const examplesUrls: string[] = [];
@@ -422,6 +373,7 @@ export default function ArtistSignUpPage() {
         agreementVersion: ARTIST_AGREEMENT_VERSION,
         profilePhotoUrl,
         agreementPdfUrl,
+        signatureImageUrl,
         examples: examplesUrls
       };
 
@@ -689,26 +641,25 @@ export default function ArtistSignUpPage() {
               </label>
 
               <div className="form-group" style={{ marginBottom: 'var(--space-md)' }}>
-                <label>Digital Signature (Type your Full Legal Name)</label>
-                <input
-                  type="text"
-                  value={digitalSignature}
-                  onChange={e => setDigitalSignature(e.target.value)}
-                  placeholder="Type your full name exactly as entered above"
-                  disabled={!hasScrolledToEnd || !agreedToTerms}
-                  style={{
-                    fontStyle: 'italic',
-                    fontFamily: "'Georgia', serif",
-                    fontSize: '16px',
-                    opacity: hasScrolledToEnd && agreedToTerms ? 1 : 0.5,
-                  }}
-                />
-                {digitalSignature && !signatureMatches && (
-                  <small style={{ color: 'var(--color-error)' }}>Signature must match the Full Name field above</small>
-                )}
-                {digitalSignature && signatureMatches && (
-                  <small style={{ color: 'var(--color-success)' }}>✓ Signature matches</small>
-                )}
+                <label>Physical Signature Upload (JPG/PNG)</label>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: '10px',
+                  opacity: hasScrolledToEnd && agreedToTerms ? 1 : 0.5,
+                  pointerEvents: hasScrolledToEnd && agreedToTerms ? 'auto' : 'none'
+                }}>
+                  {signaturePreview ? (
+                    <div style={{ position: 'relative', width: '200px', height: '100px', border: '1px solid var(--color-border)', borderRadius: '4px', overflow: 'hidden', background: '#fff' }}>
+                      <img src={signaturePreview} alt="Signature" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      <button type="button" onClick={() => { setSignatureImage(null); setSignaturePreview(''); }} style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(255,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer' }}>×</button>
+                    </div>
+                  ) : (
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => signatureInputRef.current?.click()} style={{ width: 'fit-content' }}>
+                      Upload Signature Image
+                    </button>
+                  )}
+                  <input ref={signatureInputRef} type="file" accept="image/jpeg, image/png, image/jpg" onChange={handleSignaturePhotoChange} style={{ display: 'none' }} />
+                  <p className="text-xs text-muted">Upload a clear photo of your signature on white paper.</p>
+                </div>
               </div>
 
               <button

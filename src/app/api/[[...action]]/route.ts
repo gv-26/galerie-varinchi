@@ -4,11 +4,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { eq, and, ne, desc, sql, inArray, lt, gte } from 'drizzle-orm';
+import { eq, and, ne, desc, sql, inArray, lt, gte, asc } from 'drizzle-orm';
 import { createToken, getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth';
-import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail } from '@/lib/email';
+import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail, sendOrderNotificationToAdmin, sendArtistApprovalEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { processCommissionForOrder } from '@/lib/commission';
 import crypto from 'crypto';
 import { createShiprocketOrder, assignAWB, schedulePickup } from '@/lib/shiprocket';
@@ -112,6 +112,25 @@ async function uploadToS3(file: File): Promise<string> {
   }
 }
 
+async function deleteFromS3(url: string) {
+  try {
+    const bucketName = getSecret('S3_BUCKET_NAME');
+    if (!bucketName) return;
+    
+    // Extract key from URL (e.g. https://domain.com/assets/file.png -> assets/file.png)
+    const urlObj = new URL(url);
+    const key = urlObj.pathname.substring(1); // removes leading slash
+    
+    const s3 = await getS3Client();
+    await s3.send(new DeleteObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    }));
+    console.log("AWS DELETE: Deleted", key);
+  } catch (error) {
+    console.error("S3 Delete Error for url", url, ":", error);
+  }
+}
 export async function GET(request: NextRequest, { params }: { params: Promise<{ action?: string[] }> }) {
   try {
     const { action = [] } = await params;
@@ -228,8 +247,46 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ orders: list });
     }
 
+    if (action[0] === 'blogs') {
+      if (action.length === 1) {
+        const blogs = await db.query.blogPost.findMany({
+          where: eq(schema.blogPost.status, 'PUBLISHED'),
+          orderBy: [desc(schema.blogPost.publishedAt)],
+        });
+        return NextResponse.json(blogs);
+      }
+      if (action.length === 2) {
+        const [blog] = await db.query.blogPost.findMany({
+          where: eq(schema.blogPost.slug, action[1])
+        });
+        if (!blog) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        return NextResponse.json(blog);
+      }
+    }
+
     // Admin: Requests & Management
     if (action[0] === 'admin' && user?.isAdmin) {
+      if (action[1] === 'blogs') {
+        const blogId = action[2];
+        if (blogId) {
+          const blog = await db.query.blogPost.findFirst({ where: eq(schema.blogPost.id, blogId) });
+          return blog ? NextResponse.json(blog) : NextResponse.json({ error: 'Blog not found' }, { status: 404 });
+        }
+        const blogs = await db.query.blogPost.findMany({
+          orderBy: [desc(schema.blogPost.createdAt)]
+        });
+        return NextResponse.json(blogs);
+      }
+
+      if (action[1] === 'notifications') {
+        const notifications = await db.query.adminNotification.findMany({
+          orderBy: [desc(schema.adminNotification.createdAt)],
+          limit: 20
+        });
+        const unreadCount = notifications.filter(n => !n.isRead).length;
+        return NextResponse.json({ notifications, unreadCount });
+      }
+
       if (action[1] === 'artists') {
         if (action[2] === 'stats') {
           const [pA, aA, pW] = await Promise.all([
@@ -368,6 +425,48 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             reprocessedOrdersCount: processedOrders 
           });
         }
+      }
+
+      // Admin: Frame Images
+      if (action[1] === 'frame-images') {
+        const list = await db.query.frameImage.findMany({ orderBy: [desc(schema.frameImage.createdAt)] });
+        return NextResponse.json({ frameImages: list });
+      }
+
+      // Admin: Fetch Frame to bypass CORS
+      if (action[1] === 'fetch-frame') {
+        const imageUrl = searchParams.get('url');
+        if (!imageUrl) return NextResponse.json({ error: 'url required' }, { status: 400 });
+        try {
+          const res = await fetch(imageUrl);
+          if (!res.ok) throw new Error(`Failed to fetch from source: HTTP ${res.status}`);
+          const blob = await res.blob();
+          return new NextResponse(blob, {
+            headers: {
+              'Content-Type': res.headers.get('Content-Type') || 'image/png',
+              'Cache-Control': 'public, max-age=86400',
+            }
+          });
+        } catch (proxyErr: any) {
+          return NextResponse.json({ error: `Failed to proxy image: ${proxyErr.message}` }, { status: 500 });
+        }
+      }
+
+      // Admin: Processed Images
+      if (action[1] === 'processed-images') {
+        const list = await db.query.processedImage.findMany({
+          orderBy: [asc(schema.processedImage.displayOrder), desc(schema.processedImage.createdAt)],
+        });
+        return NextResponse.json({ processedImages: list });
+      }
+
+      // Admin: Processed Folders
+      if (action[1] === 'processed-folders') {
+        const list = await db.query.processedImageFolder.findMany({
+          orderBy: [asc(schema.processedImageFolder.displayOrder), desc(schema.processedImageFolder.createdAt)],
+          with: { images: true }
+        });
+        return NextResponse.json({ processedFolders: list });
       }
     }
 
@@ -509,6 +608,88 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const finalUrl = `${cdnBase}/${key}`;
       
       return NextResponse.json({ uploadUrl, finalUrl });
+    }
+
+    // Admin: Save Frame Image record
+    if (action[0] === 'admin' && action[1] === 'frame-images' && user?.isAdmin) {
+      const { name, url } = body;
+      if (!name || !url) return NextResponse.json({ error: 'name and url required' }, { status: 400 });
+      const [record] = await db.insert(schema.frameImage).values({
+        id: crypto.randomUUID(),
+        name,
+        url,
+      }).returning();
+      return NextResponse.json({ frameImage: record });
+    }
+
+    // Admin: Save Processed Folder record
+    if (action[0] === 'admin' && action[1] === 'processed-folders' && user?.isAdmin) {
+      const { name, parentId } = body;
+      if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
+      const [record] = await db.insert(schema.processedImageFolder).values({
+        id: crypto.randomUUID(),
+        name,
+        parentId: parentId || null,
+      }).returning();
+      return NextResponse.json({ processedFolder: record });
+    }
+
+    // Admin: Save Processed Image record
+    if (action[0] === 'admin' && action[1] === 'processed-images' && user?.isAdmin) {
+      const { name, url, frameImageId, sourceImageUrl, folderId } = body;
+      if (!name || !url) return NextResponse.json({ error: 'name and url required' }, { status: 400 });
+      const [record] = await db.insert(schema.processedImage).values({
+        id: crypto.randomUUID(),
+        name,
+        url,
+        frameImageId: frameImageId || null,
+        sourceImageUrl: sourceImageUrl || null,
+        folderId: folderId || null,
+      }).returning();
+      return NextResponse.json({ processedImage: record });
+    }
+
+    // Admin: Move Processed Image
+    if (action[0] === 'admin' && action[1] === 'processed-images' && action[2] === 'move' && user?.isAdmin) {
+      const { id, folderId } = body;
+      if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+      const [record] = await db.update(schema.processedImage)
+        .set({ folderId: folderId || null })
+        .where(eq(schema.processedImage.id, id))
+        .returning();
+      return NextResponse.json({ processedImage: record });
+    }
+
+    // Admin: Move Processed Folder
+    if (action[0] === 'admin' && action[1] === 'processed-folders' && action[2] === 'move' && user?.isAdmin) {
+      const { id, parentId } = body;
+      if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+      if (id === parentId) return NextResponse.json({ error: 'cannot move folder into itself' }, { status: 400 });
+      const [record] = await db.update(schema.processedImageFolder)
+        .set({ parentId: parentId || null })
+        .where(eq(schema.processedImageFolder.id, id))
+        .returning();
+      return NextResponse.json({ processedFolder: record });
+    }
+
+    // Admin: Reorder Processed Items
+    if (action[0] === 'admin' && action[1] === 'processed-items' && action[2] === 'reorder' && user?.isAdmin) {
+      const { items } = body; // items: { id: string, type: 'folder' | 'image', displayOrder: number }[]
+      if (!Array.isArray(items)) return NextResponse.json({ error: 'items array required' }, { status: 400 });
+      
+      const promises = items.map(item => {
+        if (item.type === 'folder') {
+          return db.update(schema.processedImageFolder)
+            .set({ displayOrder: item.displayOrder })
+            .where(eq(schema.processedImageFolder.id, item.id));
+        } else if (item.type === 'image') {
+          return db.update(schema.processedImage)
+            .set({ displayOrder: item.displayOrder })
+            .where(eq(schema.processedImage.id, item.id));
+        }
+      });
+      await Promise.all(promises);
+      return NextResponse.json({ success: true });
     }
 
     // 2. Artist apply (Now JSON-based)
@@ -903,6 +1084,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       await sendOrderConfirmationEmail(user.email, order.id, order.totalAmount);
       
+      // Notify admin
+      await sendOrderNotificationToAdmin(order.id, order.totalAmount, user.email);
+      await db.insert(schema.adminNotification).values({
+        id: crypto.randomUUID(),
+        title: 'New Order Placed',
+        message: `Order ${order.id} for ₹${order.totalAmount} by ${user.email}`,
+        link: `/admin/orders?status=NEW`,
+        isRead: false
+      });
+      
       try {
         await processCommissionForOrder(order.id);
       } catch (err) {
@@ -911,7 +1102,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // Shiprocket Integration
       try {
-        const srItems = [];
+        const srItems: any[] = [];
         for (const item of body.items) {
           const p = await db.query.product.findFirst({ where: eq(schema.product.id, item.productId) });
           if (p) {
@@ -966,12 +1157,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (action[0] === 'admin' && user?.isAdmin) {
+      // Reorder folders
+      if (action[1] === 'processed-folders' && action[2] === 'reorder') {
+        const updates = body.updates; // array of { id, displayOrder }
+        if (!Array.isArray(updates)) return NextResponse.json({ error: 'invalid updates' }, { status: 400 });
+        for (const update of updates) {
+           await db.update(schema.processedImageFolder).set({ displayOrder: update.displayOrder }).where(eq(schema.processedImageFolder.id, update.id));
+        }
+        return NextResponse.json({ success: true });
+      }
+      
+      // Reorder images
+      if (action[1] === 'processed-images' && action[2] === 'reorder') {
+        const updates = body.updates; // array of { id, displayOrder }
+        if (!Array.isArray(updates)) return NextResponse.json({ error: 'invalid updates' }, { status: 400 });
+        for (const update of updates) {
+           await db.update(schema.processedImage).set({ displayOrder: update.displayOrder }).where(eq(schema.processedImage.id, update.id));
+        }
+        return NextResponse.json({ success: true });
+      }
+      
       // Review Artist
       if (action[1] === 'artists' && action[2] === 'requests' && action[3]) {
         const [profile] = await db.update(schema.artistProfile)
           .set({ status: body.action === 'APPROVE' ? 'APPROVED' : 'DECLINED' })
           .where(eq(schema.artistProfile.id, action[3]))
           .returning();
+          
+        if (body.action === 'APPROVE' && profile.agreementPdfUrl) {
+          await sendArtistApprovalEmail(profile.email, profile.fullName, profile.agreementPdfUrl);
+        }
         return NextResponse.json({ profile });
       }
       // Review Artwork
@@ -1031,6 +1246,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           expiresAt: body.expiresAt ? new Date(body.expiresAt).toISOString() : null,
         }).returning();
         return NextResponse.json({ coupon: c }, { status: 201 });
+      }
+    }
+
+    if (user?.isAdmin) {
+      if (action[0] === 'admin' && action[1] === 'blogs') {
+        try {
+          const [blog] = await db.insert(schema.blogPost).values({
+            id: crypto.randomUUID(),
+            title: body.title,
+            slug: body.slug,
+            content: body.content,
+            excerpt: body.excerpt,
+            coverImage: body.coverImage,
+            authorId: user.id,
+            status: body.status || 'DRAFT',
+            publishedAt: body.status === 'PUBLISHED' ? new Date().toISOString() : null,
+            updatedAt: new Date().toISOString()
+          }).returning();
+          return NextResponse.json(blog);
+        } catch (dbErr: any) {
+          console.error('[API Blog POST] Database error:', dbErr);
+          return NextResponse.json({ 
+            error: 'Database failed to save blog', 
+            details: dbErr.message.includes('too long') ? 'Content exceeds allowed size' : dbErr.message 
+          }, { status: 500 });
+        }
       }
     }
     
@@ -1194,6 +1435,46 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const body = await request.json();
     
     if (user?.isAdmin) {
+      if (action[0] === 'admin' && action[1] === 'blogs' && action[2]) {
+        try {
+          const dataToUpdate = { ...body, updatedAt: new Date().toISOString() };
+          if (body.status === 'PUBLISHED' && !body.publishedAt) {
+             dataToUpdate.publishedAt = new Date().toISOString();
+          }
+          const [blog] = await db.update(schema.blogPost).set(dataToUpdate).where(eq(schema.blogPost.id, action[2])).returning();
+          return NextResponse.json(blog);
+        } catch (dbErr: any) {
+          console.error('[API Blog PATCH] Database error:', dbErr);
+          return NextResponse.json({ 
+            error: 'Database failed to update blog', 
+            details: dbErr.message.includes('too long') ? 'Content exceeds allowed size' : dbErr.message 
+          }, { status: 500 });
+        }
+      }
+
+      if (action[0] === 'admin' && action[1] === 'notifications' && action[2] === 'read') {
+        if (body.id) {
+          await db.update(schema.adminNotification).set({ isRead: true }).where(eq(schema.adminNotification.id, body.id));
+        } else {
+          await db.update(schema.adminNotification).set({ isRead: true }).where(eq(schema.adminNotification.isRead, false));
+        }
+        return NextResponse.json({ success: true });
+      }
+      
+      // Admin: Rename processed folder
+      if (action[0] === 'admin' && action[1] === 'processed-folders' && action[2] && user?.isAdmin) {
+        if (!body.name) return NextResponse.json({ error: 'name required' }, { status: 400 });
+        const [record] = await db.update(schema.processedImageFolder).set({ name: body.name }).where(eq(schema.processedImageFolder.id, action[2])).returning();
+        return NextResponse.json({ processedFolder: record });
+      }
+
+      // Admin: Rename processed image
+      if (action[0] === 'admin' && action[1] === 'processed-images' && action[2] && user?.isAdmin) {
+        if (!body.name) return NextResponse.json({ error: 'name required' }, { status: 400 });
+        const [record] = await db.update(schema.processedImage).set({ name: body.name }).where(eq(schema.processedImage.id, action[2])).returning();
+        return NextResponse.json({ processedImage: record });
+      }
+      
       // Update Product status
       if (action[0] === 'products' && action[1]) {
         const [p] = await db.update(schema.product).set(body).where(eq(schema.product.id, action[1])).returning();
@@ -1285,6 +1566,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       await db.delete(schema.testimonial).where(eq(schema.testimonial.id, action[2]));
       return NextResponse.json({ message: 'Removed' });
     }
+    
+    // Admin: Delete blog
+    if (action[0] === 'admin' && action[1] === 'blogs' && action[2] && user?.isAdmin) {
+      await db.delete(schema.blogPost).where(eq(schema.blogPost.id, action[2]));
+      return NextResponse.json({ message: 'Removed' });
+    }
     // Admin: Delete coupon
     if (action[0] === 'admin' && action[1] === 'coupons' && action[2] && user?.isAdmin) {
       await db.delete(schema.coupon).where(eq(schema.coupon.id, action[2]));
@@ -1298,6 +1585,34 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       revalidatePath('/');
       return NextResponse.json({ message: 'Removed' });
     }
+
+    // Admin: Delete frame image
+    if (action[0] === 'admin' && action[1] === 'frame-images' && action[2] && user?.isAdmin) {
+      const img = await db.query.frameImage.findFirst({ where: eq(schema.frameImage.id, action[2]) });
+      if (img) await deleteFromS3(img.url);
+      await db.delete(schema.frameImage).where(eq(schema.frameImage.id, action[2]));
+      return NextResponse.json({ message: 'Removed' });
+    }
+
+    // Admin: Delete processed image
+    if (action[0] === 'admin' && action[1] === 'processed-images' && action[2] && user?.isAdmin) {
+      const img = await db.query.processedImage.findFirst({ where: eq(schema.processedImage.id, action[2]) });
+      if (img) await deleteFromS3(img.url);
+      await db.delete(schema.processedImage).where(eq(schema.processedImage.id, action[2]));
+      return NextResponse.json({ message: 'Removed' });
+    }
+
+    // Admin: Delete processed folder
+    if (action[0] === 'admin' && action[1] === 'processed-folders' && action[2] && user?.isAdmin) {
+      const folderId = action[2];
+      const images = await db.query.processedImage.findMany({ where: eq(schema.processedImage.folderId, folderId) });
+      for (const img of images) {
+        await deleteFromS3(img.url);
+      }
+      await db.delete(schema.processedImageFolder).where(eq(schema.processedImageFolder.id, folderId));
+      return NextResponse.json({ message: 'Removed' });
+    }
+
     return NextResponse.json({ error: 'Not Found' }, { status: 404 });
   } catch (error: any) { return NextResponse.json({ error: error.message || 'Error' }, { status: 500 }); }
 }

@@ -16,6 +16,8 @@ export default function AdminPage() {
   const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<Stats>({ pendingArtists: 0, approvedArtists: 0, pendingArtworks: 0 });
   const [showNotif, setShowNotif] = useState(false);
+  const [unreadOrders, setUnreadOrders] = useState<any[]>([]);
+  const [showOrderNotif, setShowOrderNotif] = useState(false);
 
   useEffect(() => {
     if (!authLoading && (!user || !user.isAdmin)) {
@@ -31,6 +33,16 @@ export default function AdminPage() {
           setStats(data);
           if (data.pendingArtists > 0 || data.pendingArtworks > 0) {
             setShowNotif(true);
+          }
+        })
+        .catch(console.error);
+
+      fetch('/api/admin/notifications')
+        .then(res => res.json())
+        .then(data => {
+          if (data.unreadCount > 0) {
+            setUnreadOrders(data.notifications.filter((n: any) => !n.isRead));
+            setShowOrderNotif(true);
           }
         })
         .catch(console.error);
@@ -73,6 +85,41 @@ export default function AdminPage() {
               borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
             }}>×</button>
+          </div>
+        )}
+
+        {showOrderNotif && unreadOrders.length > 0 && (
+          <div style={{
+            background: 'var(--color-success)', color: 'white',
+            padding: 'var(--space-md) var(--space-lg)',
+            borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-xl)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            animation: 'fadeIn 0.3s ease-in',
+          }}>
+            <div>
+              <strong>🔔 New Orders</strong>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', opacity: 0.9 }}>
+                You have {unreadOrders.length} new unread order notification{unreadOrders.length > 1 ? 's' : ''}.
+              </p>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {unreadOrders.slice(0, 3).map((notif: any) => (
+                   <Link key={notif.id} href={notif.link || '/admin/orders'} style={{ color: 'white', fontSize: '12px', textDecoration: 'underline' }}>
+                     {notif.message}
+                   </Link>
+                ))}
+                {unreadOrders.length > 3 && <span style={{ fontSize: '12px' }}>...and {unreadOrders.length - 3} more</span>}
+              </div>
+            </div>
+            <button onClick={async () => {
+              setShowOrderNotif(false);
+              try {
+                await fetch('/api/admin/notifications/read', { method: 'PATCH', body: JSON.stringify({}) });
+              } catch (e) {}
+            }} style={{
+              background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white',
+              borderRadius: '50%', padding: '4px 8px', cursor: 'pointer',
+              fontSize: '12px',
+            }}>Mark Read</button>
           </div>
         )}
 
@@ -146,6 +193,22 @@ export default function AdminPage() {
             <p className="text-sm text-muted">View platform revenue, artist commissions, and audit individual sales</p>
             <div style={{ marginTop: 'var(--space-md)' }}>
               <span className="btn btn-primary btn-sm">View Commissions →</span>
+            </div>
+          </Link>
+
+          <Link href="/admin/blogs" className="profile-card" style={{ textDecoration: 'none', transition: 'box-shadow 0.2s' }} prefetch={false}>
+            <h3 style={{ marginBottom: 'var(--space-sm)' }}>Manage Journal / Blogs</h3>
+            <p className="text-sm text-muted">Create, edit, and publish articles for the public journal</p>
+            <div style={{ marginTop: 'var(--space-md)' }}>
+              <span className="btn btn-secondary btn-sm">Manage Blogs →</span>
+            </div>
+          </Link>
+
+          <Link href="/admin/frame-composer" className="profile-card" style={{ textDecoration: 'none', transition: 'box-shadow 0.2s' }}>
+            <h3 style={{ marginBottom: 'var(--space-sm)' }}>Frame Composer</h3>
+            <p className="text-sm text-muted">Upload frame templates and composite artworks into wall frame mockups</p>
+            <div style={{ marginTop: 'var(--space-md)' }}>
+              <span className="btn btn-accent btn-sm">Open Frame Composer →</span>
             </div>
           </Link>
         </div>

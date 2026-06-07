@@ -7,14 +7,14 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from '../db/schema';
 import * as relations from '../db/relations';
-import { eq, and, lte } from 'drizzle-orm';
+import { eq, and, lte, sql } from 'drizzle-orm';
 
 export const handler = async () => {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL not set');
 
-  const sql = neon(url);
-  const db = drizzle({ client: sql, schema: { ...schema, ...relations } });
+  const sqlClient = neon(url);
+  const db = drizzle({ client: sqlClient, schema: { ...schema, ...relations } });
 
   const now = new Date().toISOString();
 

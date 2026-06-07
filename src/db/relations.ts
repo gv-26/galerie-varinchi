@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { category, subCategory, product, user, cartItem, wishlistItem, order, orderItem, artistProfile, artRequest, session, testimonial, coupon, artistWallet, commissionLedger } from "./schema";
+import { category, subCategory, product, user, cartItem, wishlistItem, order, orderItem, artistProfile, artRequest, session, testimonial, coupon, artistWallet, commissionLedger, blogPost, adminNotification, frameImage, processedImage, processedImageFolder } from "./schema";
 
 export const subCategoryRelations = relations(subCategory, ({one, many}) => ({
 	category: one(category, {
@@ -155,5 +155,39 @@ export const commissionLedgerRelations = relations(commissionLedger, ({one}) => 
 	orderItem: one(orderItem, {
 		fields: [commissionLedger.orderItemId],
 		references: [orderItem.id]
+	}),
+}));
+
+export const blogPostRelations = relations(blogPost, ({ one }) => ({
+	author: one(user, {
+		fields: [blogPost.authorId],
+		references: [user.id]
+	}),
+}));
+
+export const frameImageRelations = relations(frameImage, ({ many }) => ({
+	processedImages: many(processedImage),
+}));
+
+export const processedImageFolderRelations = relations(processedImageFolder, ({ one, many }) => ({
+	images: many(processedImage),
+	parent: one(processedImageFolder, {
+		fields: [processedImageFolder.parentId],
+		references: [processedImageFolder.id],
+		relationName: 'parent_children'
+	}),
+	children: many(processedImageFolder, {
+		relationName: 'parent_children'
+	})
+}));
+
+export const processedImageRelations = relations(processedImage, ({ one }) => ({
+	frameImage: one(frameImage, {
+		fields: [processedImage.frameImageId],
+		references: [frameImage.id]
+	}),
+	folder: one(processedImageFolder, {
+		fields: [processedImage.folderId],
+		references: [processedImageFolder.id]
 	}),
 }));

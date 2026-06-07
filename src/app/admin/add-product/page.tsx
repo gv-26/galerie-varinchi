@@ -158,6 +158,15 @@ function AddProductContent() {
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
+  // Frame Composer picker
+  const [showFramePicker, setShowFramePicker] = useState(false);
+  const [finishedImages, setFinishedImages] = useState<{ id: string; name: string; url: string; folderId?: string | null }[]>([]);
+  const [folders, setFolders] = useState<{ id: string; name: string; parentId?: string | null; images: any[] }[]>([]);
+  const [finishedLoading, setFinishedLoading] = useState(false);
+  const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
+  const [pickerViewingFolderId, setPickerViewingFolderId] = useState<string | null>(null);
+  const [pickerFolderPath, setPickerFolderPath] = useState<{ id: string; name: string }[]>([]);
+
   // ── Pricing Mode ──────────────────────────────────────────────────────────
   const [pricingMode, setPricingMode] = useState<'fixed' | 'specification'>('fixed');
 
@@ -267,6 +276,44 @@ function AddProductContent() {
     } finally {
       setUploading(false);
     }
+  };
+
+  // ── Frame Composer Picker Helpers ──────────────────────────────────────────
+  const openFramePicker = async () => {
+    setShowFramePicker(true);
+    setPickerSelected(new Set());
+    setPickerViewingFolderId(null);
+    if (finishedImages.length > 0 || folders.length > 0) return; // already loaded
+    setFinishedLoading(true);
+    try {
+      const [resImg, resFold] = await Promise.all([
+        fetch('/api/admin/processed-images'),
+        fetch('/api/admin/processed-folders')
+      ]);
+      const dataImg = await resImg.json();
+      const dataFold = await resFold.json();
+      setFinishedImages(dataImg.processedImages || []);
+      setFolders(dataFold.processedFolders || []);
+    } catch {
+      // silently ignore
+    } finally {
+      setFinishedLoading(false);
+    }
+  };
+
+  const togglePickerImage = (url: string) => {
+    setPickerSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+  };
+
+  const confirmPickerSelection = () => {
+    const newUrls = Array.from(pickerSelected).filter(url => !images.includes(url));
+    setImages(prev => [...prev, ...newUrls]);
+    setShowFramePicker(false);
   };
 
   // ── Size Helpers ──────────────────────────────────────────────────────────
@@ -459,6 +506,214 @@ function AddProductContent() {
   });
 
   return (
+    <>
+    {/* ── Frame Composer Picker Modal ── */}
+    {showFramePicker && (
+      <div
+        id="fc-picker-modal"
+        style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '24px',
+        }}
+        onClick={() => setShowFramePicker(false)}
+      >
+        <div
+          style={{
+            background: 'var(--color-bg)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+            width: '100%',
+            maxWidth: '820px',
+            maxHeight: '85vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '20px 24px',
+            borderBottom: '1px solid var(--color-border)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {pickerFolderPath.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newPath = [...pickerFolderPath];
+                    newPath.pop();
+                    setPickerFolderPath(newPath);
+                    setPickerViewingFolderId(newPath.length > 0 ? newPath[newPath.length - 1].id : null);
+                  }}
+                  style={{
+                    padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'none', cursor: 'pointer'
+                  }}
+                >
+                  ← Back to {pickerFolderPath.length > 1 ? pickerFolderPath[pickerFolderPath.length - 2].name : 'Root'}
+                </button>
+              )}
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                  {pickerFolderPath.length > 0 ? `🖼 Picking from folder: ${pickerFolderPath[pickerFolderPath.length - 1].name}` : '🖼 Pick from Frame Composer'}
+                </h2>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                  Select one or more finished composited images to add to this product.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFramePicker(false)}
+              style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}
+            >×</button>
+          </div>
+
+          {/* Modal Body */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+            {(() => {
+              const renderImageCard = (img: any) => {
+                  const isSelected = pickerSelected.has(img.url);
+                  const alreadyAdded = images.includes(img.url);
+                  return (
+                    <div
+                      id={`fc-picker-img-${img.id}`}
+                      key={img.id}
+                      onClick={() => !alreadyAdded && togglePickerImage(img.url)}
+                      style={{
+                        border: `2.5px solid ${isSelected ? 'var(--color-accent)' : alreadyAdded ? 'var(--color-success, #22c55e)' : 'var(--color-border)'}`,
+                        borderRadius: 'var(--radius-md)',
+                        overflow: 'hidden',
+                        cursor: alreadyAdded ? 'default' : 'pointer',
+                        position: 'relative',
+                        transition: 'border-color 0.15s, transform 0.15s',
+                        transform: isSelected ? 'scale(0.97)' : 'scale(1)',
+                        opacity: alreadyAdded ? 0.6 : 1,
+                      }}
+                    >
+                      <img src={img.url} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} />
+                      {isSelected && (
+                        <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'var(--color-accent)', color: '#fff', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700 }}>✓</div>
+                      )}
+                      {alreadyAdded && (
+                        <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'var(--color-success, #22c55e)', color: '#fff', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700 }}>✓</div>
+                      )}
+                      <div style={{ padding: '8px 10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={img.name}>{img.name}</div>
+                        {alreadyAdded && <div style={{ fontSize: '11px', color: 'var(--color-success, #22c55e)', marginTop: '2px' }}>Already added</div>}
+                      </div>
+                    </div>
+                  );
+              };
+
+              if (finishedLoading) {
+                 return (
+                   <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                     <div className="spinner" />
+                     <p style={{ marginTop: '12px', color: 'var(--color-text-muted)' }}>Loading…</p>
+                   </div>
+                 );
+              }
+              
+              if (finishedImages.length === 0 && folders.length === 0) {
+                 return (
+                   <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                     <div style={{ fontSize: '40px', marginBottom: '12px' }}>✨</div>
+                     <p style={{ fontWeight: 600, fontSize: '15px' }}>No finished images yet</p>
+                     <p style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>Go to Frame Composer to create composited images first.</p>
+                   </div>
+                 );
+              }
+
+              return (
+                <>
+                  {pickerViewingFolderId && (
+                    <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      <button type="button" onClick={() => {
+                        const folderImgs = finishedImages.filter(i => i.folderId === pickerViewingFolderId);
+                        const allUrls = folderImgs.map(img => img.url).filter(url => !images.includes(url));
+                        setPickerSelected(prev => {
+                          const next = new Set(prev);
+                          allUrls.forEach(url => next.add(url));
+                          return next;
+                        });
+                      }} style={{ fontSize: '13px', padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'none', cursor: 'pointer', fontWeight: 600 }}>Select All in Folder</button>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px' }}>
+                    {folders.filter(f => (pickerViewingFolderId ? f.parentId === pickerViewingFolderId : !f.parentId)).map(folder => (
+                      <div key={folder.id} onClick={() => { setPickerViewingFolderId(folder.id); setPickerFolderPath([...pickerFolderPath, { id: folder.id, name: folder.name }]); }} style={{ border: '2px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', cursor: 'pointer' }}>
+                        <div style={{ width: '100%', height: '150px', background: 'var(--color-bg-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px' }}>
+                          📁
+                        </div>
+                        <div style={{ padding: '8px 10px' }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={folder.name}>
+                            {folder.name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{(finishedImages.filter(i => i.folderId === folder.id).length + folders.filter(f => f.parentId === folder.id).length)} items</div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {finishedImages.filter(img => (pickerViewingFolderId ? img.folderId === pickerViewingFolderId : !img.folderId)).map(renderImageCard)}
+                    
+                    {folders.filter(f => (pickerViewingFolderId ? f.parentId === pickerViewingFolderId : !f.parentId)).length === 0 && finishedImages.filter(img => (pickerViewingFolderId ? img.folderId === pickerViewingFolderId : !img.folderId)).length === 0 && (
+                       <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>Folder is empty.</div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Modal Footer */}
+          <div style={{
+            padding: '16px 24px',
+            borderTop: '1px solid var(--color-border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+            background: 'var(--color-bg-light)',
+          }}>
+            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+              {pickerSelected.size > 0 ? `${pickerSelected.size} image${pickerSelected.size !== 1 ? 's' : ''} selected` : 'Click images to select'}
+            </span>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowFramePicker(false)}
+                style={{
+                  padding: '9px 20px', border: '1.5px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)', background: 'none',
+                  cursor: 'pointer', fontSize: '14px',
+                }}
+              >Cancel</button>
+              <button
+                id="fc-picker-confirm-btn"
+                type="button"
+                disabled={pickerSelected.size === 0}
+                onClick={confirmPickerSelection}
+                style={{
+                  padding: '9px 22px',
+                  background: pickerSelected.size === 0 ? 'var(--color-border)' : 'var(--color-accent)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: pickerSelected.size === 0 ? 'default' : 'pointer',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  transition: 'background 0.2s',
+                }}
+              >
+                Add {pickerSelected.size > 0 ? `${pickerSelected.size} ` : ''}Image{pickerSelected.size !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="page-content fade-in">
       <div className="container" style={{ maxWidth: '760px' }}>
         <div style={{ marginBottom: 'var(--space-xl)' }}>
@@ -527,6 +782,33 @@ function AddProductContent() {
                   <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageUpload} />
                   {uploading && <span className="spinner"></span>}
                 </div>
+
+                {/* Pick from Frame Composer */}
+                <div style={{ marginTop: 'var(--space-sm)' }}>
+                  <button
+                    type="button"
+                    id="fc-picker-open-btn"
+                    onClick={openFramePicker}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 16px',
+                      background: 'var(--color-bg-light)',
+                      border: '1.5px dashed var(--color-accent)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--color-accent)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    🖼 Pick from Frame Composer
+                  </button>
+                  <p className="text-xs text-muted" style={{ marginTop: '4px' }}>Select finished composited images from the Frame Composer tool.</p>
+                </div>
+
                 {images.length > 0 && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
                     {images.map((img, idx) => (
@@ -983,6 +1265,7 @@ function AddProductContent() {
         )}
       </div>
     </div>
+    </>
   );
 }
 

@@ -58,7 +58,7 @@ export default function ContactPage() {
           <p className="text-secondary">We&apos;d love to hear from you</p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2xl)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--space-2xl)' }}>
           <form onSubmit={handleSubmit}>
             {error && <div className="alert alert-error">{error}</div>}
 

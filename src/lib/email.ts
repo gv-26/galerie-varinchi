@@ -148,3 +148,57 @@ export async function sendArtworkSubmissionEmail(artistName: string, artworkTitl
     `
   );
 }
+
+export async function sendOrderNotificationToAdmin(orderId: string, totalAmount: number, customerEmail: string): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [ADMIN NOTIFY] New Order ${orderId}`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    ADMIN_EMAIL,
+    `New Order Received — ${orderId}`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">A new order has been placed on the platform.</p>
+        <p style="color: #666; font-size: 14px;">Order ID: <strong>${orderId}</strong></p>
+        <p style="color: #666; font-size: 14px;">Customer Email: <strong>${customerEmail}</strong></p>
+        <p style="color: #666; font-size: 14px;">Total Amount: <strong>₹${totalAmount.toLocaleString()}</strong></p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">Review this order in the Admin Dashboard.</p>
+      </div>
+    `
+  );
+}
+
+export async function sendArtistApprovalEmail(artistEmail: string, artistName: string, agreementPdfUrl: string): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [ARTIST APPROVAL] Sent to ${artistEmail}`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    artistEmail,
+    `Welcome to Galerie Varinchi - Profile Approved`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">Dear ${artistName},</p>
+        <p style="color: #333;">We are thrilled to inform you that your artist profile has been approved!</p>
+        <p style="color: #666; font-size: 14px;">You can now log in to your Artist Dashboard to start submitting your artworks.</p>
+        <p style="color: #666; font-size: 14px;">Your signed collaboration agreement is attached and available here: <a href="${agreementPdfUrl}">Download Agreement</a></p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">Welcome to the Galerie Varinchi family.</p>
+      </div>
+    `
+  );
+}

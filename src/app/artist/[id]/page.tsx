@@ -25,6 +25,7 @@ export default function ArtistProfilePage() {
   const { id } = useParams();
   const [artist, setArtist] = useState<ArtistProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -130,7 +131,8 @@ export default function ArtistProfilePage() {
                   <img
                     src={url}
                     alt={`${artist.fullName} artwork ${i + 1}`}
-                    style={{ width: '100%', height: '200px', objectFit: 'cover' }}
+                    onClick={() => setPreviewImage(url)}
+                    style={{ width: '100%', height: '200px', objectFit: 'cover', cursor: 'pointer' }}
                   />
                 </div>
               ))}
@@ -138,6 +140,42 @@ export default function ArtistProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Fullscreen Image Preview Modal */}
+      {previewImage && (
+        <div
+          onClick={() => setPreviewImage(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.9)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+          }}
+        >
+          <button
+            onClick={() => setPreviewImage(null)}
+            style={{
+              position: 'absolute', top: '20px', right: '20px',
+              background: 'rgba(255,255,255,0.2)', color: 'white',
+              border: 'none', borderRadius: '50%', width: '40px', height: '40px',
+              fontSize: '20px', cursor: 'pointer', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            ×
+          </button>
+          <img
+            src={previewImage}
+            alt="Full screen preview"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: '90vw', maxHeight: '90vh',
+              objectFit: 'contain', borderRadius: '8px',
+              cursor: 'default',
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

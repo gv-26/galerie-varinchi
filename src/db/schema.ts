@@ -137,6 +137,15 @@ export const order = pgTable("Order", {
 		}).onUpdate("cascade").onDelete("cascade"),
 ]);
 
+export const adminNotification = pgTable("AdminNotification", {
+	id: text().primaryKey().notNull(),
+	title: text().notNull(),
+	message: text().notNull(),
+	link: text(),
+	isRead: boolean().default(false).notNull(),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const orderItem = pgTable("OrderItem", {
 	id: text().primaryKey().notNull(),
 	orderId: text().notNull(),
@@ -323,5 +332,69 @@ export const commissionLedger = pgTable("CommissionLedger", {
 			columns: [table.productId],
 			foreignColumns: [product.id],
 			name: "CommissionLedger_productId_fkey"
+		}).onUpdate("cascade").onDelete("cascade"),
+]);
+
+export const frameImage = pgTable("FrameImage", {
+	id: text().primaryKey().notNull(),
+	name: text().notNull(),
+	url: text().notNull(),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const processedImageFolder = pgTable("ProcessedImageFolder", {
+	id: text().primaryKey().notNull(),
+	name: text().notNull(),
+	parentId: text(),
+	displayOrder: integer().default(0).notNull(),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.parentId],
+		foreignColumns: [table.id],
+		name: "ProcessedImageFolder_parentId_fkey"
+	}).onUpdate("cascade").onDelete("cascade"),
+]);
+
+export const processedImage = pgTable("ProcessedImage", {
+	id: text().primaryKey().notNull(),
+	name: text().notNull(),
+	url: text().notNull(),
+	frameImageId: text(),
+	sourceImageUrl: text(),
+	folderId: text(),
+	displayOrder: integer().default(0).notNull(),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.frameImageId],
+		foreignColumns: [frameImage.id],
+		name: "ProcessedImage_frameImageId_fkey"
+	}).onUpdate("cascade").onDelete("set null"),
+	foreignKey({
+		columns: [table.folderId],
+		foreignColumns: [processedImageFolder.id],
+		name: "ProcessedImage_folderId_fkey"
+	}).onUpdate("cascade").onDelete("cascade"),
+]);
+
+export const blogPost = pgTable("BlogPost", {
+	id: text().primaryKey().notNull(),
+	title: text().notNull(),
+	slug: text().notNull(),
+	content: text().notNull(),
+	excerpt: text(),
+	coverImage: text(),
+	authorId: text().notNull(),
+	status: text().default('DRAFT').notNull(),
+	publishedAt: timestamp({ precision: 3, mode: 'string' }),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+	updatedAt: timestamp({ precision: 3, mode: 'string' }).notNull(),
+}, (table) => [
+	uniqueIndex("BlogPost_slug_key").using("btree", table.slug.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.authorId],
+			foreignColumns: [user.id],
+			name: "BlogPost_authorId_fkey"
 		}).onUpdate("cascade").onDelete("cascade"),
 ]);

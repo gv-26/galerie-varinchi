@@ -1,6 +1,16 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export default function Footer() {
+  const pathname = usePathname();
+
+  // Hide the public footer on admin and artist dashboard portals
+  if (pathname?.startsWith('/admin') || pathname?.startsWith('/artist')) {
+    return null;
+  }
+
   return (
     <footer className="footer">
       <div className="container">
