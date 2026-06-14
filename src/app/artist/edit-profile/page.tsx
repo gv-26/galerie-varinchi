@@ -32,6 +32,7 @@ export default function EditProfilePage() {
 
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState('');
+  const [latestConsent, setLatestConsent] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -57,6 +58,9 @@ export default function EditProfilePage() {
             setAccountNumber(p.accountNumber || '');
             setIfscCode(p.ifscCode || '');
             setBankBranch(p.bankBranch || '');
+            if (data.latestConsent) {
+              setLatestConsent(data.latestConsent);
+            }
           } else {
             setError('Artist profile not found.');
           }
@@ -268,6 +272,24 @@ export default function EditProfilePage() {
             {savingBank ? 'Saving...' : 'Save Bank Details'}
           </button>
         </div>
+
+        {/* Agreement Section */}
+        {latestConsent?.agreementPdfUrl && (
+          <div className="profile-card" style={{ marginTop: 'var(--space-xl)' }}>
+            <h3 style={{ marginBottom: 'var(--space-md)' }}>Artist Agreement</h3>
+            <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-md)' }}>
+              You last signed the agreement on {new Date(latestConsent.signedAt).toLocaleDateString()}.
+            </p>
+            <a 
+              href={latestConsent.agreementPdfUrl} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="btn btn-secondary"
+            >
+              📥 Download Signed Agreement
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

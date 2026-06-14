@@ -18,12 +18,14 @@ interface ArtistProfile {
   country: string;
   state: string;
   status: string;
+  agreementPdfUrl?: string | null;
 }
 
 export default function ArtistProfilePage() {
   const router = useRouter();
   const { id } = useParams();
   const [artist, setArtist] = useState<ArtistProfile | null>(null);
+  const [latestConsent, setLatestConsent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const { user } = useAuth();
@@ -31,7 +33,11 @@ export default function ArtistProfilePage() {
   useEffect(() => {
     fetch(`/api/artist/${id}`)
       .then(res => res.json())
-      .then(data => { setArtist(data.profile || null); setLoading(false); })
+      .then(data => { 
+        setArtist(data.profile || null); 
+        if (data.latestConsent) setLatestConsent(data.latestConsent);
+        setLoading(false); 
+      })
       .catch(() => setLoading(false));
   }, [id]);
 
@@ -105,6 +111,18 @@ export default function ArtistProfilePage() {
             >
               View Portfolio →
             </a>
+          )}
+          {(user?.isAdmin || user?.id === artist.userId) && (latestConsent?.agreementPdfUrl || artist.agreementPdfUrl) && (
+            <div style={{ marginTop: 'var(--space-md)' }}>
+              <a
+                href={latestConsent?.agreementPdfUrl || artist.agreementPdfUrl!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-sm"
+              >
+                📥 Download Agreement
+              </a>
+            </div>
           )}
         </div>
 

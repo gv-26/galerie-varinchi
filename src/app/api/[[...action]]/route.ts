@@ -6,7 +6,7 @@ import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, and, ne, desc, sql, inArray, lt, gte, asc } from 'drizzle-orm';
 import { createToken, getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth';
-import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail, sendOrderNotificationToAdmin, sendArtistApprovalEmail } from '@/lib/email';
+import { sendOtpEmail, sendOrderConfirmationEmail, sendArtistApplicationEmail, sendArtworkSubmissionEmail, sendOrderNotificationToAdmin, sendArtistApprovalEmail, sendNewAgreementNotificationEmail, sendSignedAgreementEmail } from '@/lib/email';
 import { getSecret } from '@/lib/secrets';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { processCommissionForOrder } from '@/lib/commission';
@@ -299,7 +299,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         
         if (action[2] === 'list') {
           const approved = await db.query.artistProfile.findMany({ where: eq(schema.artistProfile.status, 'APPROVED') });
-          return NextResponse.json({ artists: approved });
+          const artistsWithLatestConsent = await Promise.all(approved.map(async (artist) => {
+            const latestConsent = await db.query.artistAgreementConsent.findFirst({
+              where: eq(schema.artistAgreementConsent.artistId, artist.id),
+              orderBy: [desc(schema.artistAgreementConsent.signedAt)],
+            });
+            return {
+              ...artist,
+              agreementPdfUrl: latestConsent?.agreementPdfUrl || artist.agreementPdfUrl
+            };
+          }));
+          return NextResponse.json({ artists: artistsWithLatestConsent });
         }
 
         if (action[2] === 'requests') {
@@ -468,23 +478,55 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         });
         return NextResponse.json({ processedFolders: list });
       }
+
+      // Admin: List all agreement versions
+      if (action[1] === 'agreements') {
+        const versions = await db.query.agreementVersion.findMany({
+          orderBy: [desc(schema.agreementVersion.createdAt)],
+        });
+        return NextResponse.json({ versions });
+      }
+    }
+
+    // Public: Get the active agreement version (used by signup page & artist dashboard)
+    if (action[0] === 'agreements' && action[1] === 'active') {
+      const active = await db.query.agreementVersion.findFirst({
+        where: eq(schema.agreementVersion.isActive, true),
+      });
+      return NextResponse.json({ version: active || null });
     }
 
     // Public/Admin: Artist Profile by ID
-    if (action[0] === 'artist' && action[1] && !['profile', 'art-requests', 'apply', 'wallet'].includes(action[1])) {
+    if (action[0] === 'artist' && action[1] && !['profile', 'art-requests', 'apply', 'wallet', 'agreements'].includes(action[1])) {
       const condition = user?.isAdmin 
         ? eq(schema.artistProfile.id, action[1])
         : and(eq(schema.artistProfile.id, action[1]), eq(schema.artistProfile.status, 'APPROVED'));
       const profile = await db.query.artistProfile.findFirst({ where: condition });
-      return profile 
-        ? NextResponse.json({ profile }) 
-        : NextResponse.json({ error: 'Not found' }, { status: 404 });
+      
+      if (!profile) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      
+      let latestConsent = null;
+      if (user?.isAdmin || user?.id === profile.userId) {
+        latestConsent = await db.query.artistAgreementConsent.findFirst({
+          where: eq(schema.artistAgreementConsent.artistId, profile.id),
+          orderBy: [desc(schema.artistAgreementConsent.signedAt)],
+        });
+      }
+      
+      return NextResponse.json({ profile, latestConsent });
     }
 
     // Artist: Dashboard & Profile (authenticated)
     if (action[0] === 'artist' && user) {
        const profile = await db.query.artistProfile.findFirst({ where: eq(schema.artistProfile.userId, user.id) });
-       if (action[1] === 'profile') return NextResponse.json({ profile });
+       if (action[1] === 'profile') {
+         if (!profile) return NextResponse.json({ profile: null });
+         const latestConsent = await db.query.artistAgreementConsent.findFirst({
+           where: eq(schema.artistAgreementConsent.artistId, profile.id),
+           orderBy: [desc(schema.artistAgreementConsent.signedAt)],
+         });
+         return NextResponse.json({ profile, latestConsent });
+       }
        if (action[1] === 'art-requests' && profile) {
          const requests = await db.query.artRequest.findMany({ where: eq(schema.artRequest.artistId, profile.id) });
          return NextResponse.json({ requests });
@@ -532,6 +574,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
            totalEarned: Math.round(totalEarned * 100) / 100, 
            totalSales 
          });
+       }
+
+       // Artist: Check for pending agreement to sign
+       if (action[1] === 'agreements' && action[2] === 'pending' && profile) {
+         const active = await db.query.agreementVersion.findFirst({
+           where: eq(schema.agreementVersion.isActive, true),
+         });
+         if (!active) return NextResponse.json({ pendingVersion: null });
+         const consent = await db.query.artistAgreementConsent.findFirst({
+           where: and(
+             eq(schema.artistAgreementConsent.artistId, profile.id),
+             eq(schema.artistAgreementConsent.agreementVersionId, active.id)
+           ),
+         });
+         return NextResponse.json({ pendingVersion: consent ? null : active });
        }
     }
 
@@ -620,6 +677,98 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         url,
       }).returning();
       return NextResponse.json({ frameImage: record });
+    }
+
+    // Admin: Create a new agreement version and optionally activate it
+    if (action[0] === 'admin' && action[1] === 'agreements' && user?.isAdmin) {
+      const { versionNumber, title, content, pdfUrl, notifyArtists } = body;
+      if (!versionNumber || !content) return NextResponse.json({ error: 'versionNumber and content are required' }, { status: 400 });
+
+      // Deactivate all previous versions
+      await db.update(schema.agreementVersion).set({ isActive: false });
+
+      // Insert the new version as active
+      const now = new Date().toISOString();
+      const [newVersion] = await db.insert(schema.agreementVersion).values({
+        id: crypto.randomUUID(),
+        versionNumber,
+        title: title || 'Artist Collaboration Agreement',
+        content,
+        pdfUrl: pdfUrl || null,
+        isActive: true,
+        notifyArtists: notifyArtists !== false,
+        publishedAt: now,
+      }).returning();
+
+      // If notifyArtists is true, send email to all APPROVED artists
+      if (notifyArtists !== false) {
+        try {
+          const approvedArtists = await db.query.artistProfile.findMany({
+            where: eq(schema.artistProfile.status, 'APPROVED'),
+          });
+          const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.galerievarinchi.com';
+          await Promise.allSettled(
+            approvedArtists.map(artist =>
+              sendNewAgreementNotificationEmail(
+                artist.email,
+                artist.fullName,
+                versionNumber,
+                `${baseUrl}/artist/dashboard`
+              )
+            )
+          );
+        } catch (emailErr) {
+          console.error('[Agreement] Failed to send notification emails:', emailErr);
+        }
+      }
+
+      return NextResponse.json({ version: newVersion });
+    }
+
+    // Artist: Sign an agreement version
+    if (action[0] === 'artist' && action[1] === 'agreements' && action[2] === 'sign' && user) {
+      const { agreementVersionId, signatureImageUrl, agreementPdfUrl, ipAddress } = body;
+      if (!agreementVersionId) return NextResponse.json({ error: 'agreementVersionId required' }, { status: 400 });
+
+      const profile = await db.query.artistProfile.findFirst({
+        where: eq(schema.artistProfile.userId, user.id),
+      });
+      if (!profile) return NextResponse.json({ error: 'Artist profile not found' }, { status: 404 });
+
+      // Check if already signed
+      const existing = await db.query.artistAgreementConsent.findFirst({
+        where: and(
+          eq(schema.artistAgreementConsent.artistId, profile.id),
+          eq(schema.artistAgreementConsent.agreementVersionId, agreementVersionId)
+        ),
+      });
+      if (existing) return NextResponse.json({ consent: existing });
+
+      const [consent] = await db.insert(schema.artistAgreementConsent).values({
+        id: crypto.randomUUID(),
+        artistId: profile.id,
+        agreementVersionId,
+        signedAt: new Date().toISOString(),
+        signatureImageUrl: signatureImageUrl || null,
+        agreementPdfUrl: agreementPdfUrl || null,
+        ipAddress: ipAddress || request.headers.get('x-forwarded-for') || 'unknown',
+      }).returning();
+
+      if (consent.agreementPdfUrl) {
+        const version = await db.query.agreementVersion.findFirst({
+          where: eq(schema.agreementVersion.id, agreementVersionId)
+        });
+        if (version) {
+          sendSignedAgreementEmail(
+            profile.email, 
+            profile.fullName, 
+            version.versionNumber, 
+            consent.agreementPdfUrl
+          ).catch(e => console.error('Failed to send signed agreement email:', e));
+        }
+      }
+
+      return NextResponse.json({ consent });
     }
 
     // Admin: Save Processed Folder record
@@ -1461,6 +1610,48 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return NextResponse.json({ success: true });
       }
       
+      // Admin: Move Processed Image into a folder
+      if (action[0] === 'admin' && action[1] === 'processed-images' && action[2] === 'move') {
+        const { id, folderId } = body;
+        if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+        const [record] = await db.update(schema.processedImage)
+          .set({ folderId: folderId || null })
+          .where(eq(schema.processedImage.id, id))
+          .returning();
+        return NextResponse.json({ processedImage: record });
+      }
+
+      // Admin: Move Processed Folder into another folder
+      if (action[0] === 'admin' && action[1] === 'processed-folders' && action[2] === 'move') {
+        const { id, parentId } = body;
+        if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+        if (id === parentId) return NextResponse.json({ error: 'cannot move folder into itself' }, { status: 400 });
+        const [record] = await db.update(schema.processedImageFolder)
+          .set({ parentId: parentId || null })
+          .where(eq(schema.processedImageFolder.id, id))
+          .returning();
+        return NextResponse.json({ processedFolder: record });
+      }
+
+      // Admin: Reorder Processed Items (folders and images)
+      if (action[0] === 'admin' && action[1] === 'processed-items' && action[2] === 'reorder') {
+        const { items } = body; // items: { id: string, type: 'folder' | 'image', displayOrder: number }[]
+        if (!Array.isArray(items)) return NextResponse.json({ error: 'items array required' }, { status: 400 });
+        const promises = items.map(item => {
+          if (item.type === 'folder') {
+            return db.update(schema.processedImageFolder)
+              .set({ displayOrder: item.displayOrder })
+              .where(eq(schema.processedImageFolder.id, item.id));
+          } else if (item.type === 'image') {
+            return db.update(schema.processedImage)
+              .set({ displayOrder: item.displayOrder })
+              .where(eq(schema.processedImage.id, item.id));
+          }
+        });
+        await Promise.all(promises);
+        return NextResponse.json({ success: true });
+      }
+
       // Admin: Rename processed folder
       if (action[0] === 'admin' && action[1] === 'processed-folders' && action[2] && user?.isAdmin) {
         if (!body.name) return NextResponse.json({ error: 'name required' }, { status: 400 });

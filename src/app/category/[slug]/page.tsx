@@ -59,7 +59,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
                   <span className="text-xs text-muted">{sub.products.length} piece{sub.products.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="product-grid">
-                  {(sub?.products || []).slice(0, 3).map((product: any) => (
+                  {(sub?.products || []).slice(0, 4).map((product: any) => (
                     <ProductCard
                       key={product.id}
                       id={product.id}
@@ -69,7 +69,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
                     />
                   ))}
                 </div>
-                {sub.products.length > 3 && (
+                {sub.products.length > 4 && (
                   <div style={{ marginTop: 'var(--space-xl)', textAlign: 'center' }}>
                     <Link href={`/category/${category.slug}/${sub.slug}`} className="btn btn-secondary">
                       View all {sub.products.length} {sub.name} pieces →

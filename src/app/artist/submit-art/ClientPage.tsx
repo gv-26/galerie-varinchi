@@ -59,18 +59,45 @@ export default function SubmitArtPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch('/api/categories')
+    fetch(`/api/artist/profile?t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
-        setCategories(data);
-        if (data.length > 0) {
-          setCategoryId(data[0].id);
-          const subs = data[0].subCategories || [];
-          setSubCategories(subs);
-          if (subs.length > 0) setSubCategoryId(subs[0].id);
+        if (!data.profile) {
+          router.push('/artist/signup');
+          return;
         }
+        if (data.profile.status !== 'APPROVED') {
+          router.push('/artist/dashboard');
+          return;
+        }
+        
+        // Block if pending agreement exists
+        fetch(`/api/artist/agreements/pending?t=${Date.now()}`, { cache: 'no-store' })
+          .then(r => r.json())
+          .then(d => {
+            if (d.pendingVersion) {
+              router.push('/artist/dashboard');
+            }
+          })
+          .catch(() => {});
+
+        // Fetch categories
+        fetch('/api/categories')
+          .then(res => res.json())
+          .then(catData => {
+            setCategories(catData);
+            if (catData.length > 0) {
+              setCategoryId(catData[0].id);
+              const subs = catData[0].subCategories || [];
+              setSubCategories(subs);
+              if (subs.length > 0) setSubCategoryId(subs[0].id);
+            }
+          });
+      })
+      .catch(() => {
+        router.push('/artist/dashboard');
       });
-  }, []);
+  }, [router]);
 
   const handleCategoryChange = (id: string) => {
     setCategoryId(id);

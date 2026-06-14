@@ -129,14 +129,16 @@ async function ensureBrowserFriendlyImage(file: File): Promise<File> {
 /** Upload a file to S3 via presigned URL. Returns the CDN URL. */
 async function uploadFilePresigned(file: File, prefix = 'frame'): Promise<string> {
   const ext = file.name.split('.').pop() || 'jpg';
-  const filename = `${prefix}-${Date.now()}.${ext}`;
+  const filename = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
   const res = await fetch('/api/upload/presigned', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ filename, contentType: file.type }),
   });
   const { uploadUrl, finalUrl } = await res.json();
-  await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+  if (!uploadUrl) throw new Error('Failed to get upload URL');
+  const s3Res = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+  if (!s3Res.ok) throw new Error(`S3 Upload failed: ${s3Res.status}`);
   return finalUrl;
 }
 
@@ -162,6 +164,12 @@ function detectGreenBounds(imageData: ImageData): { minX: number; minY: number; 
   }
 
   if (maxX === -1 || count < 100) return null;
+  // Expand bounds to ensure artwork covers the edge
+  const PAD = 4;
+  minX = Math.max(0, minX - PAD);
+  minY = Math.max(0, minY - PAD);
+  maxX = Math.min(width - 1, maxX + PAD);
+  maxY = Math.min(height - 1, maxY + PAD);
   return { minX, minY, maxX, maxY, count };
 }
 
@@ -171,20 +179,56 @@ function compositeImages(
   artworkCanvas: HTMLCanvasElement,
   bounds: { minX: number; minY: number; maxX: number; maxY: number },
 ): ImageData {
-  const { data, width } = frameImageData;
+  const { data, width, height } = frameImageData;
   const artCtx = artworkCanvas.getContext('2d')!;
   const artData = artCtx.getImageData(0, 0, artworkCanvas.width, artworkCanvas.height);
   const bw = bounds.maxX - bounds.minX + 1;
   const bh = bounds.maxY - bounds.minY + 1;
 
-  for (let y = bounds.minY; y <= bounds.maxY; y++) {
-    for (let x = bounds.minX; x <= bounds.maxX; x++) {
+  const EXTRA_PIXELS = 4;
+  const mask = new Uint8Array(width * height);
+  
+  // 1. Identify all roughly green pixels (relaxed threshold for the fringe)
+  for (let y = Math.max(0, bounds.minY - EXTRA_PIXELS * 2); y <= Math.min(height - 1, bounds.maxY + EXTRA_PIXELS * 2); y++) {
+    for (let x = Math.max(0, bounds.minX - EXTRA_PIXELS * 2); x <= Math.min(width - 1, bounds.maxX + EXTRA_PIXELS * 2); x++) {
       const idx = (y * width + x) * 4;
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-      if (g > 140 && g > r * 1.35 && g > b * 1.35) {
-        // Map this green pixel to artwork coordinates
-        const ax = Math.floor(((x - bounds.minX) / bw) * artworkCanvas.width);
-        const ay = Math.floor(((y - bounds.minY) / bh) * artworkCanvas.height);
+      // Relaxed green threshold for mask to catch edge cases
+      if (g > 100 && g > r * 1.15 && g > b * 1.15) {
+        mask[y * width + x] = 1;
+      }
+    }
+  }
+
+  // 2. Dilate the mask by EXTRA_PIXELS to cover fringe completely
+  const dilatedMask = new Uint8Array(width * height);
+  for (let y = Math.max(0, bounds.minY - EXTRA_PIXELS * 2); y <= Math.min(height - 1, bounds.maxY + EXTRA_PIXELS * 2); y++) {
+    for (let x = Math.max(0, bounds.minX - EXTRA_PIXELS * 2); x <= Math.min(width - 1, bounds.maxX + EXTRA_PIXELS * 2); x++) {
+      let isNearGreen = false;
+      for (let dy = -EXTRA_PIXELS; dy <= EXTRA_PIXELS; dy++) {
+        for (let dx = -EXTRA_PIXELS; dx <= EXTRA_PIXELS; dx++) {
+          const ny = y + dy;
+          const nx = x + dx;
+          if (ny >= 0 && ny < height && nx >= 0 && nx < width && mask[ny * width + nx]) {
+            isNearGreen = true;
+            break;
+          }
+        }
+        if (isNearGreen) break;
+      }
+      if (isNearGreen) {
+        dilatedMask[y * width + x] = 1;
+      }
+    }
+  }
+
+  // 3. Composite using dilated mask
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (dilatedMask[y * width + x]) {
+        const idx = (y * width + x) * 4;
+        const ax = Math.max(0, Math.min(artworkCanvas.width - 1, Math.floor(((x - bounds.minX) / bw) * artworkCanvas.width)));
+        const ay = Math.max(0, Math.min(artworkCanvas.height - 1, Math.floor(((y - bounds.minY) / bh) * artworkCanvas.height)));
         const aIdx = (ay * artworkCanvas.width + ax) * 4;
         data[idx]     = artData.data[aIdx];
         data[idx + 1] = artData.data[aIdx + 1];
@@ -217,11 +261,12 @@ export default function FrameComposerPage() {
   const [artworkFile, setArtworkFile] = useState<File | null>(null);
   const [artworkPreviewUrl, setArtworkPreviewUrl] = useState<string | null>(null);
   const [artworkDims, setArtworkDims] = useState<{ w: number; h: number } | null>(null);
-  const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
+  const [selectedFrameIds, setSelectedFrameIds] = useState<Set<string>>(new Set());
   const [processing, setProcessing] = useState(false);
   const [processError, setProcessError] = useState<string | null>(null);
   const [processSuccess, setProcessSuccess] = useState<string | null>(null);
-  const [processedFileName, setProcessedFileName] = useState('');
+  const [processedFileNames, setProcessedFileNames] = useState<Record<string, string>>({});
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
 
   // Process state - foldering
   const [selectedFolderId, setSelectedFolderId] = useState<string>('root');
@@ -257,7 +302,7 @@ export default function FrameComposerPage() {
   const loadFrameImages = useCallback(async () => {
     setFrameLoading(true);
     try {
-      const res = await fetch('/api/admin/frame-images');
+      const res = await fetch('/api/admin/frame-images', { cache: 'no-store' });
       const data = await res.json();
       setFrameImages(data.frameImages || []);
     } catch (e) {
@@ -272,8 +317,8 @@ export default function FrameComposerPage() {
     setFinishedLoading(true);
     try {
       const [resImg, resFold] = await Promise.all([
-        fetch('/api/admin/processed-images'),
-        fetch('/api/admin/processed-folders')
+        fetch('/api/admin/processed-images', { cache: 'no-store' }),
+        fetch('/api/admin/processed-folders', { cache: 'no-store' })
       ]);
       const dataImg = await resImg.json();
       const dataFold = await resFold.json();
@@ -293,21 +338,32 @@ export default function FrameComposerPage() {
     }
   }, [user, loadFrameImages, loadFinishedImages]);
 
-  // Auto-generate default filename when frame or artwork changes
+  // Auto-generate default filename when frames or artwork changes
   useEffect(() => {
-    if (artworkFile && selectedFrameId && frameImages.length > 0) {
-      const frame = frameImages.find(f => f.id === selectedFrameId);
-      if (frame) {
-        const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const dt = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-        const defaultName = `${frame.name}-${artworkFile.name.replace(/\.[^.]+$/, '')}-${dt}`;
-        setProcessedFileName(defaultName);
-      }
+    if (artworkFile && selectedFrameIds.size > 0 && frameImages.length > 0) {
+      const newNames: Record<string, string> = {};
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const dt = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+      
+      selectedFrameIds.forEach(id => {
+        const frame = frameImages.find(f => f.id === id);
+        if (frame) {
+          newNames[id] = `${frame.name}-${artworkFile.name.replace(/\.[^.]+$/, '')}-${dt}`;
+        }
+      });
+      // Merge with existing so we don't overwrite user edits if they just clicked another frame
+      setProcessedFileNames(prev => {
+        const merged = { ...newNames, ...prev };
+        // Clean up unselected ones
+        const finalObj: Record<string, string> = {};
+        selectedFrameIds.forEach(id => finalObj[id] = merged[id]);
+        return finalObj;
+      });
     } else {
-      setProcessedFileName('');
+      setProcessedFileNames({});
     }
-  }, [selectedFrameId, artworkFile, frameImages]);
+  }, [selectedFrameIds, artworkFile, frameImages]);
 
   // ── Upload frame image ──────────────────────────────────────────────────────
   const handleFrameUpload = async (file: File) => {
@@ -339,7 +395,7 @@ export default function FrameComposerPage() {
     if (!confirm('Delete this frame image? Processed images using it will not be affected.')) return;
     await fetch(`/api/admin/frame-images/${id}`, { method: 'DELETE' });
     setFrameImages(prev => prev.filter(f => f.id !== id));
-    if (selectedFrameId === id) setSelectedFrameId(null);
+    setSelectedFrameIds(prev => { const next = new Set(prev); next.delete(id); return next; });
   };
 
   // ── Delete finished image ────────────────────────────────────────────────────
@@ -391,14 +447,14 @@ export default function FrameComposerPage() {
   const handleMoveOut = async (id: string, type: 'folder' | 'image') => {
     if (type === 'folder') {
       await fetch(`/api/admin/processed-folders/move`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, parentId: null })
       });
       setFolders(prev => prev.map(f => f.id === id ? { ...f, parentId: null } : f));
     } else {
       await fetch(`/api/admin/processed-images/move`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, folderId: null })
       });
@@ -445,6 +501,24 @@ export default function FrameComposerPage() {
     }
   };
 
+  const handleFolderDragOver = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedItem && draggedItem.id !== folderId) {
+      e.dataTransfer.dropEffect = 'move';
+      setDragOverFolderId(folderId);
+    }
+  };
+
+  const handleFolderDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only clear if we truly left the folder element
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverFolderId(null);
+    }
+  };
+
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOverTargetId(null);
@@ -453,25 +527,27 @@ export default function FrameComposerPage() {
   const handleDragEnd = () => {
     setDraggedItem(null);
     setDragOverTargetId(null);
+    setDragOverFolderId(null);
   };
 
   const handleDropOnFolder = async (e: React.DragEvent, targetFolderId: string) => {
     e.preventDefault();
     e.stopPropagation();
     setDragOverTargetId(null);
+    setDragOverFolderId(null);
     if (!draggedItem || draggedItem.id === targetFolderId) return;
 
     if (draggedItem.type === 'folder') {
       // Prevent dropping a folder into itself or if we wanted to prevent deep nesting (but let's just do it)
       await fetch(`/api/admin/processed-folders/move`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: draggedItem.id, parentId: targetFolderId })
       });
       setFolders(prev => prev.map(f => f.id === draggedItem.id ? { ...f, parentId: targetFolderId } : f));
     } else {
       await fetch(`/api/admin/processed-images/move`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: draggedItem.id, folderId: targetFolderId })
       });
@@ -525,10 +601,10 @@ export default function FrameComposerPage() {
          return updated ? { ...f, displayOrder: updated.displayOrder } : f;
       }).sort((a, b) => a.displayOrder - b.displayOrder));
       
-      await fetch('/api/admin/processed-folders/reorder', {
+      await fetch('/api/admin/processed-items/reorder', {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ updates })
+         body: JSON.stringify({ items: updates.map(u => ({ ...u, type: 'folder' })) })
       });
     } else {
       const draggedIdx = finishedImages.findIndex(i => i.id === draggedItem.id);
@@ -568,10 +644,10 @@ export default function FrameComposerPage() {
          return f;
       }));
       
-      await fetch('/api/admin/processed-images/reorder', {
+      await fetch('/api/admin/processed-items/reorder', {
          method: 'POST',
          headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ updates })
+         body: JSON.stringify({ items: updates.map(u => ({ ...u, type: 'image' })) })
       });
     }
     
@@ -613,143 +689,25 @@ export default function FrameComposerPage() {
 
   // ── Process / Composite ─────────────────────────────────────────────────────
   const handleProcess = async () => {
-    if (!artworkFile || !selectedFrameId) return;
+    if (!artworkFile || selectedFrameIds.size === 0) return;
 
-    const frameRecord = frameImages.find(f => f.id === selectedFrameId);
-    if (!frameRecord) return;
+    const selectedFrames = frameImages.filter(f => selectedFrameIds.has(f.id));
+    if (selectedFrames.length === 0) return;
 
     setProcessing(true);
     setProcessError(null);
     setProcessSuccess(null);
 
     try {
-      // 1. Load frame image into a canvas
-      //    Use fetch → blob URL to avoid CORS/tainted-canvas issues with S3/CloudFront.
-      let frameBlobUrl: string;
-      const proxyUrl = `/api/admin/fetch-frame?url=${encodeURIComponent(frameRecord.url)}`;
-      try {
-        const frameRes = await fetch(proxyUrl);
-        if (!frameRes.ok) throw new Error(`HTTP ${frameRes.status}`);
-        const frameBlob = await frameRes.blob();
-        frameBlobUrl = URL.createObjectURL(frameBlob);
-      } catch (fetchErr: any) {
-        throw new Error(
-          `Could not download the frame image via proxy (${fetchErr.message}). URL: ${proxyUrl}. ` +
-          'Check that your adblocker is disabled and try again.'
-        );
-      }
-
-      const frameImg = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('Failed to render the frame image into canvas.'));
-        img.src = frameBlobUrl;
-      });
-
-      const frameCanvas = document.createElement('canvas');
-      frameCanvas.width = frameImg.naturalWidth;
-      frameCanvas.height = frameImg.naturalHeight;
-      const frameCtx = frameCanvas.getContext('2d')!;
-      frameCtx.drawImage(frameImg, 0, 0);
-      const frameImageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
-
-      // 2. Detect green bounding box
-      const bounds = detectGreenBounds(frameImageData);
-      if (!bounds) {
-        setProcessError('No green area detected in the selected frame image. Ensure the frame contains a clearly visible green placeholder region (R<80, G>140, B<80).');
-        setProcessing(false);
-        return;
-      }
-
-      const greenW = bounds.maxX - bounds.minX + 1;
-      const greenH = bounds.maxY - bounds.minY + 1;
-      const greenRatio = greenW / greenH;
-
-      // 3. Check aspect ratio
+      // Pre-load and prepare the artwork once (shared across all selected frames)
       const artImg = await new Promise<HTMLImageElement>((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
-        img.onerror = (e) => {
-          console.error('Artwork image load failed:', e, {
-            name: artworkFile.name,
-            type: artworkFile.type,
-            size: artworkFile.size,
-            previewUrl: artworkPreviewUrl,
-          });
-          reject(new Error(`Failed to load artwork image (${artworkFile.name}). Ensure it is a valid, uncorrupted image file.`));
-        };
+        img.onerror = () => reject(new Error(`Failed to load artwork image (${artworkFile.name}).`));
         img.src = artworkPreviewUrl || URL.createObjectURL(artworkFile);
       });
 
-      const artRatio = artImg.naturalWidth / artImg.naturalHeight;
-      const ratioDiff = Math.abs(artRatio - greenRatio) / greenRatio;
-
-      if (ratioDiff > 0.05) {
-        const greenAspect = `${greenW}×${greenH} (${greenRatio.toFixed(2)}:1)`;
-        const artAspect = `${artImg.naturalWidth}×${artImg.naturalHeight} (${artRatio.toFixed(2)}:1)`;
-        setProcessError(
-          `Aspect ratio mismatch (${(ratioDiff * 100).toFixed(1)}% difference).\n\n` +
-          `• Green area in frame: ${greenAspect}\n` +
-          `• Artwork dimensions:  ${artAspect}\n\n` +
-          `Please crop your artwork to match the frame's aspect ratio, or choose a different frame.`
-        );
-        setProcessing(false);
-        return;
-      }
-
-      // 4. Scale artwork to green bounding box with high-quality step-down scaling
-      const artCanvas = document.createElement('canvas');
-      artCanvas.width = greenW;
-      artCanvas.height = greenH;
-      const artCtx = artCanvas.getContext('2d')!;
-      artCtx.imageSmoothingEnabled = true;
-      artCtx.imageSmoothingQuality = 'high';
-
-      let curW = artImg.naturalWidth;
-      let curH = artImg.naturalHeight;
-
-      if (curW > greenW * 2 && curH > greenH * 2) {
-        let tempCanvas = document.createElement('canvas');
-        tempCanvas.width = curW;
-        tempCanvas.height = curH;
-        let tempCtx = tempCanvas.getContext('2d')!;
-        tempCtx.imageSmoothingEnabled = true;
-        tempCtx.imageSmoothingQuality = 'high';
-        tempCtx.drawImage(artImg, 0, 0, curW, curH);
-
-        while (curW > greenW * 2 && curH > greenH * 2) {
-          const nextW = Math.max(greenW, Math.floor(curW / 2));
-          const nextH = Math.max(greenH, Math.floor(curH / 2));
-          const nextCanvas = document.createElement('canvas');
-          nextCanvas.width = nextW;
-          nextCanvas.height = nextH;
-          const nextCtx = nextCanvas.getContext('2d')!;
-          nextCtx.imageSmoothingEnabled = true;
-          nextCtx.imageSmoothingQuality = 'high';
-          nextCtx.drawImage(tempCanvas, 0, 0, nextW, nextH);
-          tempCanvas = nextCanvas;
-          curW = nextW;
-          curH = nextH;
-        }
-        artCtx.drawImage(tempCanvas, 0, 0, greenW, greenH);
-      } else {
-        artCtx.drawImage(artImg, 0, 0, greenW, greenH);
-      }
-
-      // 5. Composite
-      const composited = compositeImages(frameImageData, artCanvas, bounds);
-      frameCtx.putImageData(composited, 0, 0);
-
-      // 6. Export to blob
-      const blob = await new Promise<Blob>((resolve, reject) =>
-        frameCanvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/png', 1.0)
-      );
-
-      // 7. Upload composited image
-      const compositedFile = new File([blob], `composited-${Date.now()}.png`, { type: 'image/png' });
-      const finalUrl = await uploadFilePresigned(compositedFile, 'composited');
-
-      // 7.5 Handle folder creation if needed
+      // Handle folder creation if needed (once for all frames)
       let finalFolderId = selectedFolderId === 'root' ? null : selectedFolderId;
       if (selectedFolderId === 'new') {
         if (!newFolderName.trim()) throw new Error('Folder name cannot be empty');
@@ -768,18 +726,140 @@ export default function FrameComposerPage() {
         setNewFolderName('');
       }
 
-      // 8. Save record
-      const defaultName = `${artworkFile.name.replace(/\.[^.]+$/, '')}_in_${frameRecord.name}`;
-      const name = processedFileName.trim() || defaultName;
-      await fetch('/api/admin/processed-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, url: finalUrl, frameImageId: selectedFrameId, sourceImageUrl: null, folderId: finalFolderId }),
-      });
+      let successCount = 0;
+      const errors: string[] = [];
+
+      for (const frameRecord of selectedFrames) {
+        try {
+          // 1. Load frame image
+          let frameBlobUrl: string;
+          const proxyUrl = `/api/admin/fetch-frame?url=${encodeURIComponent(frameRecord.url)}`;
+          try {
+            const frameRes = await fetch(proxyUrl);
+            if (!frameRes.ok) throw new Error(`HTTP ${frameRes.status}`);
+            const frameBlob = await frameRes.blob();
+            frameBlobUrl = URL.createObjectURL(frameBlob);
+          } catch (fetchErr: any) {
+            throw new Error(`Could not download frame "${frameRecord.name}": ${fetchErr.message}`);
+          }
+
+          const frameImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error(`Failed to render frame "${frameRecord.name}" into canvas.`));
+            img.src = frameBlobUrl;
+          });
+
+          const frameCanvas = document.createElement('canvas');
+          frameCanvas.width = frameImg.naturalWidth;
+          frameCanvas.height = frameImg.naturalHeight;
+          const frameCtx = frameCanvas.getContext('2d')!;
+          frameCtx.drawImage(frameImg, 0, 0);
+          const frameImageData = frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height);
+
+          // 2. Detect green bounding box
+          const bounds = detectGreenBounds(frameImageData);
+          if (!bounds) {
+            errors.push(`"${frameRecord.name}": No green area detected.`);
+            continue;
+          }
+
+          const greenW = bounds.maxX - bounds.minX + 1;
+          const greenH = bounds.maxY - bounds.minY + 1;
+          const greenRatio = greenW / greenH;
+
+          // 3. Calculate cropping (object-fit: cover style) to fix aspect ratio mismatches
+          const artRatio = artImg.naturalWidth / artImg.naturalHeight;
+          let sx = 0, sy = 0, sw = artImg.naturalWidth, sh = artImg.naturalHeight;
+          if (Math.abs(artRatio - greenRatio) > 0.01) {
+            if (artRatio > greenRatio) {
+              // Artwork is wider than the frame -> crop sides
+              sw = artImg.naturalHeight * greenRatio;
+              sx = (artImg.naturalWidth - sw) / 2;
+            } else {
+              // Artwork is taller than the frame -> crop top/bottom
+              sh = artImg.naturalWidth / greenRatio;
+              sy = (artImg.naturalHeight - sh) / 2;
+            }
+          }
+
+          // 4. Scale artwork to green bounding box
+          const artCanvas = document.createElement('canvas');
+          artCanvas.width = greenW;
+          artCanvas.height = greenH;
+          const artCtx = artCanvas.getContext('2d')!;
+          artCtx.imageSmoothingEnabled = true;
+          artCtx.imageSmoothingQuality = 'high';
+
+          // High quality downsampling
+          let curW = sw;
+          let curH = sh;
+          if (curW > greenW * 2 && curH > greenH * 2) {
+            let tempCanvas = document.createElement('canvas');
+            tempCanvas.width = curW; tempCanvas.height = curH;
+            let tempCtx = tempCanvas.getContext('2d')!;
+            tempCtx.imageSmoothingEnabled = true; tempCtx.imageSmoothingQuality = 'high';
+            tempCtx.drawImage(artImg, sx, sy, sw, sh, 0, 0, curW, curH);
+            
+            while (curW > greenW * 2 && curH > greenH * 2) {
+              const nextW = Math.max(greenW, Math.floor(curW / 2));
+              const nextH = Math.max(greenH, Math.floor(curH / 2));
+              const nextCanvas = document.createElement('canvas');
+              nextCanvas.width = nextW; nextCanvas.height = nextH;
+              const nextCtx = nextCanvas.getContext('2d')!;
+              nextCtx.imageSmoothingEnabled = true; nextCtx.imageSmoothingQuality = 'high';
+              nextCtx.drawImage(tempCanvas, 0, 0, nextW, nextH);
+              tempCanvas = nextCanvas; curW = nextW; curH = nextH;
+            }
+            artCtx.drawImage(tempCanvas, 0, 0, greenW, greenH);
+          } else {
+            artCtx.drawImage(artImg, sx, sy, sw, sh, 0, 0, greenW, greenH);
+          }
+
+          // 5. Composite
+          const composited = compositeImages(frameImageData, artCanvas, bounds);
+          frameCtx.putImageData(composited, 0, 0);
+
+          // 6. Export
+          const blob = await new Promise<Blob>((resolve, reject) =>
+            frameCanvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/png', 1.0)
+          );
+
+          // 7. Upload
+          const compositedFile = new File([blob], `composited-${Date.now()}.png`, { type: 'image/png' });
+          const finalUrl = await uploadFilePresigned(compositedFile, 'composited');
+
+          // 8. Save record
+          const name = processedFileNames[frameRecord.id]?.trim() || `${artworkFile.name.replace(/\.[^.]+$/, '')}_in_${frameRecord.name}`;
+          const res = await fetch('/api/admin/processed-images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, url: finalUrl, frameImageId: frameRecord.id, sourceImageUrl: null, folderId: finalFolderId }),
+          });
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(`DB Save Failed: ${errBody.error || res.status}`);
+          }
+          const { processedImage } = await res.json();
+          setFinishedImages(prev => [processedImage, ...prev]);
+          successCount++;
+        } catch (frameErr: any) {
+          errors.push(`"${frameRecord.name}": ${frameErr.message}`);
+        } finally {
+          if (typeof frameBlobUrl !== 'undefined') URL.revokeObjectURL(frameBlobUrl);
+        }
+      }
 
       await loadFinishedImages();
-      setProcessSuccess('✓ Image composited and saved successfully! View it in Finished Images.');
-      setActivePanel('finished');
+      if (successCount > 0) {
+        const successMsg = selectedFrames.length > 1
+          ? `✓ ${successCount} of ${selectedFrames.length} images composited and saved!`
+          : '✓ Image composited and saved successfully!';
+        setProcessSuccess(errors.length > 0 ? `${successMsg}\nErrors: ${errors.join('; ')}` : successMsg);
+        setActivePanel('finished');
+      } else {
+        setProcessError(`All frames failed:\n${errors.join('\n')}`);
+      }
     } catch (err: any) {
       setProcessError(err.message || 'An error occurred during processing.');
     } finally {
@@ -807,7 +887,7 @@ export default function FrameComposerPage() {
     );
   }
 
-  const selectedFrame = frameImages.find(f => f.id === selectedFrameId);
+  const selectedFramesList = frameImages.filter(f => selectedFrameIds.has(f.id));
 
   return (
     <>
@@ -1032,9 +1112,9 @@ export default function FrameComposerPage() {
                 <div>
                   <p className="fc-section-label">2. Select a Frame Template</p>
 
-                  {selectedFrame ? (
+                  {selectedFramesList.length > 0 ? (
                     <div className="fc-frame-select-label">
-                      ✓ Selected: <strong>{selectedFrame.name}</strong>
+                      ✓ {selectedFramesList.length} frame{selectedFramesList.length > 1 ? 's' : ''} selected: <strong>{selectedFramesList.map(f => f.name).join(', ')}</strong>
                       {artworkDims && (
                         <span style={{ marginLeft: 'auto', float: 'right', color: 'var(--color-text-muted)' }}>
                           Artwork: {artworkDims.w}×{artworkDims.h}
@@ -1043,7 +1123,7 @@ export default function FrameComposerPage() {
                     </div>
                   ) : (
                     <div className="fc-frame-select-label">
-                      Click a frame below to select it
+                      Click frames below to select (multiple allowed)
                     </div>
                   )}
 
@@ -1061,10 +1141,10 @@ export default function FrameComposerPage() {
                       {frameImages.map(frame => (
                         <div
                           key={frame.id}
-                          className={`fc-image-card${selectedFrameId === frame.id ? ' selected' : ''}`}
-                          onClick={() => { setSelectedFrameId(frame.id); setProcessError(null); }}
+                          className={`fc-image-card${selectedFrameIds.has(frame.id) ? ' selected' : ''}`}
+                          onClick={() => { setSelectedFrameIds(prev => { const next = new Set(prev); if (next.has(frame.id)) next.delete(frame.id); else next.add(frame.id); return next; }); setProcessError(null); }}
                         >
-                          {selectedFrameId === frame.id && (
+                          {selectedFrameIds.has(frame.id) && (
                             <div className="fc-selected-badge">Selected</div>
                           )}
                           <div className="fc-image-card-thumb">
@@ -1102,24 +1182,34 @@ export default function FrameComposerPage() {
                   </button>
                 </div>
 
-                <p className="fc-section-label">4. File Name</p>
-                <div style={{ marginBottom: 'var(--space-lg)' }}>
-                  <input
-                    type="text"
-                    placeholder="Enter file name"
-                    value={processedFileName}
-                    onChange={e => setProcessedFileName(e.target.value)}
-                    style={{
-                      padding: '10px 16px',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--color-border)',
-                      fontSize: '14px',
-                      backgroundColor: 'var(--color-bg)',
-                      color: 'var(--color-text)',
-                      width: '100%',
-                      maxWidth: '500px'
-                    }}
-                  />
+                <p className="fc-section-label">4. File Name{selectedFramesList.length > 1 ? 's' : ''}</p>
+                <div style={{ marginBottom: 'var(--space-lg)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {selectedFramesList.length === 0 && (
+                    <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Select frames to enter names</span>
+                  )}
+                  {selectedFramesList.map(frame => (
+                    <div key={frame.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', minWidth: '120px' }} title={frame.name}>
+                        {frame.name.length > 20 ? frame.name.substring(0, 18) + '...' : frame.name}:
+                      </span>
+                      <input
+                        type="text"
+                        placeholder={`Enter file name for ${frame.name}`}
+                        value={processedFileNames[frame.id] || ''}
+                        onChange={e => setProcessedFileNames(prev => ({ ...prev, [frame.id]: e.target.value }))}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid var(--color-border)',
+                          fontSize: '14px',
+                          backgroundColor: 'var(--color-bg)',
+                          color: 'var(--color-text)',
+                          flex: 1,
+                          maxWidth: '400px'
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 <p className="fc-section-label">5. Composite</p>
@@ -1127,7 +1217,7 @@ export default function FrameComposerPage() {
                   <button
                     id="fc-process-btn"
                     className="fc-process-btn"
-                    disabled={!artworkFile || !selectedFrameId || processing}
+                    disabled={!artworkFile || selectedFrameIds.size === 0 || processing}
                     onClick={handleProcess}
                   >
                     {processing ? (
@@ -1144,9 +1234,9 @@ export default function FrameComposerPage() {
                       Upload an artwork image to continue
                     </span>
                   )}
-                  {artworkFile && !selectedFrameId && (
+                  {artworkFile && selectedFrameIds.size === 0 && (
                     <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-                      Select a frame template to continue
+                      Select one or more frame templates to continue
                     </span>
                   )}
                 </div>
@@ -1198,7 +1288,7 @@ export default function FrameComposerPage() {
                     <div 
                       key={folder.id} 
                       className={`fc-finished-card${dragOverTargetId === folder.id ? ' fc-drag-over' : ''} fc-drag-item`} 
-                      style={{ border: '2px solid var(--color-border)' }}
+                      style={{ border: `2px solid ${dragOverFolderId === folder.id ? 'var(--color-accent)' : 'var(--color-border)'}`, transition: 'border-color 0.2s, box-shadow 0.2s', boxShadow: dragOverFolderId === folder.id ? '0 0 0 3px rgba(139,115,85,0.3)' : 'none' }}
                       draggable
                       onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
                       onDragOver={(e) => handleDragOver(e, folder.id)}
@@ -1212,9 +1302,18 @@ export default function FrameComposerPage() {
                           setViewingFolderId(folder.id);
                           setFolderPath([...folderPath, { id: folder.id, name: folder.name }]);
                         }} 
-                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onDragOver={(e) => handleFolderDragOver(e, folder.id)}
+                        onDragLeave={handleFolderDragLeave}
                         onDrop={(e) => handleDropOnFolder(e, folder.id)}
-                        style={{ cursor: 'pointer', background: 'var(--color-bg-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px' }}
+                        style={{ 
+                          cursor: 'pointer', 
+                          background: dragOverFolderId === folder.id ? 'rgba(139,115,85,0.15)' : 'var(--color-bg-alt)', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          fontSize: dragOverFolderId === folder.id ? '72px' : '48px',
+                          transition: 'font-size 0.18s ease, background 0.18s',
+                        }}
                       >
                         📁
                       </div>
