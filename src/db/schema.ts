@@ -55,6 +55,7 @@ export const product = pgTable("Product", {
 	priceModifiers: text().default('{}').notNull(),
 	unitsAvailable: integer(),
 	totalCommissionPaid: doublePrecision().default(0).notNull(),
+	shippingModifiers: text().default('{}').notNull(),
 	weight: doublePrecision(),
 	length: doublePrecision(),
 	width: doublePrecision(),
@@ -398,3 +399,39 @@ export const blogPost = pgTable("BlogPost", {
 			name: "BlogPost_authorId_fkey"
 		}).onUpdate("cascade").onDelete("cascade"),
 ]);
+
+// Agreement version management
+export const agreementVersion = pgTable("AgreementVersion", {
+	id: text().primaryKey().notNull(),
+	versionNumber: text().notNull(),         // e.g. "1.0", "1.1", "2.0"
+	title: text().default('Artist Collaboration Agreement').notNull(),
+	content: text().notNull(),               // Full agreement text used for PDF generation
+	pdfUrl: text(),                          // Optional reference PDF uploaded by admin
+	isActive: boolean().default(false).notNull(),
+	notifyArtists: boolean().default(true).notNull(),
+	publishedAt: timestamp({ precision: 3, mode: 'string' }),
+	createdAt: timestamp({ precision: 3, mode: 'string' }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Tracks per-artist consent to each agreement version
+export const artistAgreementConsent = pgTable("ArtistAgreementConsent", {
+	id: text().primaryKey().notNull(),
+	artistId: text().notNull(),              // FK -> artistProfile.id
+	agreementVersionId: text().notNull(),    // FK -> agreementVersion.id
+	signedAt: timestamp({ precision: 3, mode: 'string' }).notNull(),
+	signatureImageUrl: text(),
+	agreementPdfUrl: text(),                 // The generated signed PDF stored in S3
+	ipAddress: text(),
+}, (table) => [
+	foreignKey({
+		columns: [table.artistId],
+		foreignColumns: [artistProfile.id],
+		name: "ArtistAgreementConsent_artistId_fkey"
+	}).onUpdate("cascade").onDelete("cascade"),
+	foreignKey({
+		columns: [table.agreementVersionId],
+		foreignColumns: [agreementVersion.id],
+		name: "ArtistAgreementConsent_agreementVersionId_fkey"
+	}).onUpdate("cascade").onDelete("cascade"),
+]);
+

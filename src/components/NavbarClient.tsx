@@ -69,14 +69,17 @@ export default function Navbar({ categories }: { categories: Category[] }) {
         </button>
 
         <div className={`nav-categories ${menuOpen ? 'open' : ''}`}>
-          <Link href="/blogs" onClick={() => setMenuOpen(false)} style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 600, color: 'var(--color-text)' }} prefetch={false}>
-            Journal
+          <Link href="/about" onClick={() => setMenuOpen(false)} style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 600, color: 'var(--color-text)' }} prefetch={false}>
+            About
           </Link>
           {localCategories.map(cat => (
             <Link key={cat.slug} href={`/category/${cat.slug}`} onClick={() => setMenuOpen(false)} style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 600, color: 'var(--color-text)' }}>
               {cat.name}
             </Link>
           ))}
+          <Link href="/blogs" onClick={() => setMenuOpen(false)} style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 600, color: 'var(--color-text)' }} prefetch={false}>
+            Journal
+          </Link>
         </div>
 
         <div className="nav-actions">

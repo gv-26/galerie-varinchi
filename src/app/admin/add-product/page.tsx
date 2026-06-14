@@ -154,12 +154,23 @@ function AddProductContent() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
-  // Image Upload
+  // Image Upload (global — used in Fixed mode)
   const [images, setImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Fixed mode: which image is the main/cover photo
+  const [mainPhotoIndex, setMainPhotoIndex] = useState(0);
+
+  // Per-combo images (Specification mode)
+  // comboImages: { [comboKey]: string[] }
+  // comboMainPhoto: { [comboKey]: number } — index of main photo
+  const [comboImages, setComboImages] = useState<Record<string, string[]>>({});
+  const [comboMainPhoto, setComboMainPhoto] = useState<Record<string, number>>({});
+  const [comboUploading, setComboUploading] = useState<Record<string, boolean>>({});
 
   // Frame Composer picker
   const [showFramePicker, setShowFramePicker] = useState(false);
+  // pickerTargetCombo: null = fixed mode global images; string = spec mode combo key
+  const [pickerTargetCombo, setPickerTargetCombo] = useState<string | null>(null);
   const [finishedImages, setFinishedImages] = useState<{ id: string; name: string; url: string; folderId?: string | null }[]>([]);
   const [folders, setFolders] = useState<{ id: string; name: string; parentId?: string | null; images: any[] }[]>([]);
   const [finishedLoading, setFinishedLoading] = useState(false);
@@ -278,8 +289,31 @@ function AddProductContent() {
     }
   };
 
+  // Upload images for a specific combo (spec mode)
+  const handleComboImageUpload = async (combo: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+    setComboUploading(prev => ({ ...prev, [combo]: true }));
+    const uploadedUrls: string[] = [];
+    try {
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const formData = new FormData();
+        formData.append('file', selectedFiles[i]);
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) uploadedUrls.push(data.url);
+      }
+      setComboImages(prev => ({ ...prev, [combo]: [...(prev[combo] || []), ...uploadedUrls] }));
+    } catch {
+      alert('Upload failed');
+    } finally {
+      setComboUploading(prev => ({ ...prev, [combo]: false }));
+    }
+  };
+
   // ── Frame Composer Picker Helpers ──────────────────────────────────────────
-  const openFramePicker = async () => {
+  const openFramePicker = async (comboKey: string | null = null) => {
+    setPickerTargetCombo(comboKey);
     setShowFramePicker(true);
     setPickerSelected(new Set());
     setPickerViewingFolderId(null);
@@ -311,8 +345,18 @@ function AddProductContent() {
   };
 
   const confirmPickerSelection = () => {
-    const newUrls = Array.from(pickerSelected).filter(url => !images.includes(url));
-    setImages(prev => [...prev, ...newUrls]);
+    const newUrls = Array.from(pickerSelected);
+    if (pickerTargetCombo !== null) {
+      // Spec mode: add to combo
+      setComboImages(prev => {
+        const existing = prev[pickerTargetCombo] || [];
+        const filtered = newUrls.filter(u => !existing.includes(u));
+        return { ...prev, [pickerTargetCombo]: [...existing, ...filtered] };
+      });
+    } else {
+      // Fixed mode: add to global images
+      setImages(prev => [...prev, ...newUrls.filter(u => !prev.includes(u))]);
+    }
     setShowFramePicker(false);
   };
 
@@ -400,6 +444,7 @@ function AddProductContent() {
     let finalSpecs: { name: string; options: string[] }[] = [];
     let finalBasePrice: number;
     let finalPriceModifiers: Record<string, number> = {};
+    let finalShippingModifiers: Record<string, { weight: number; length: number; width: number; height: number }> = {};
 
     if (pricingMode === 'fixed') {
       finalSpecs = validSpecs.map(s => ({
@@ -434,18 +479,68 @@ function AddProductContent() {
       finalBasePrice = Math.min(...calculatedPrices.map(p => p.finalPrice));
       for (const p of calculatedPrices) {
         finalPriceModifiers[p.combo] = Math.round(p.finalPrice);
+
+        // Calculate shipping metrics for this combo based on size label
+        const sizeLabel = p.combo.split(' | ')[0];
+        const sizeObj = validSizes.find(s => (s.label.trim() || autoLabel(s.widthCm, s.heightCm)) === sizeLabel);
+        if (sizeObj) {
+          const wCm = parseFloat(sizeObj.widthCm) || 0;
+          const hCm = parseFloat(sizeObj.heightCm) || 0;
+          const l = Math.max(wCm, hCm) + 5;
+          const w = Math.min(wCm, hCm) + 5;
+          const h = 8;
+          const vol = l * w * h;
+          const wt = vol * 0.20708 / 1000; // Convert to kg to match fixed input
+          finalShippingModifiers[p.combo] = { weight: Number(wt.toFixed(2)), length: l, width: w, height: h };
+        }
       }
+    }
+
+    // Build images JSON
+    let finalImageStr: string;
+    if (pricingMode === 'specification') {
+      // Store combo images as a control object as the first element
+      const controlObj = { _combos: comboImages, _comboMain: comboMainPhoto };
+      finalImageStr = JSON.stringify([JSON.stringify(controlObj)]);
+    } else {
+      // Fixed mode: reorder so main photo is first
+      const reordered = [...images];
+      if (mainPhotoIndex > 0 && mainPhotoIndex < reordered.length) {
+        const [main] = reordered.splice(mainPhotoIndex, 1);
+        reordered.unshift(main);
+      }
+      finalImageStr = JSON.stringify(reordered);
+    }
+
+    // Determine main image (cover)
+    let mainImage = '/images/placeholder.jpg';
+    if (pricingMode === 'specification') {
+      // Use the main photo of the first combo that has images
+      const firstComboWithImages = calculatedPrices.find(p => (comboImages[p.combo] || []).length > 0);
+      if (firstComboWithImages) {
+        const imgs = comboImages[firstComboWithImages.combo];
+        const mainIdx = comboMainPhoto[firstComboWithImages.combo] || 0;
+        mainImage = imgs[mainIdx] || imgs[0] || mainImage;
+      }
+    } else {
+      const reordered = [...images];
+      if (mainPhotoIndex > 0 && mainPhotoIndex < reordered.length) {
+        const [main] = reordered.splice(mainPhotoIndex, 1);
+        reordered.unshift(main);
+      }
+      mainImage = reordered[0] || mainImage;
     }
 
     const body = {
       title,
       description,
-      image: images[0] || '/images/placeholder.jpg',
-      images: JSON.stringify(images),
+      image: mainImage,
+      images: finalImageStr,
       subCategoryId,
       specifications: JSON.stringify(finalSpecs),
       basePrice: finalBasePrice,
       priceModifiers: JSON.stringify(finalPriceModifiers),
+      shippingModifiers: JSON.stringify(finalShippingModifiers),
       unitsAvailable: hasUnits ? (parseInt(unitsAvailable) || 0) : null,
       requestId: requestId || undefined,
       artistProfileId: artistProfileId || null,
@@ -776,52 +871,8 @@ function AddProductContent() {
                 <label>Description</label>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} required placeholder="Product description" rows={4} />
               </div>
-              <div className="form-group">
-                <label>Product Images</label>
-                <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center' }}>
-                  <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageUpload} />
-                  {uploading && <span className="spinner"></span>}
-                </div>
-
-                {/* Pick from Frame Composer */}
-                <div style={{ marginTop: 'var(--space-sm)' }}>
-                  <button
-                    type="button"
-                    id="fc-picker-open-btn"
-                    onClick={openFramePicker}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 16px',
-                      background: 'var(--color-bg-light)',
-                      border: '1.5px dashed var(--color-accent)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'var(--color-accent)',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    🖼 Pick from Frame Composer
-                  </button>
-                  <p className="text-xs text-muted" style={{ marginTop: '4px' }}>Select finished composited images from the Frame Composer tool.</p>
-                </div>
-
-                {images.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
-                    {images.map((img, idx) => (
-                      <div key={idx} style={{ position: 'relative', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                        <img src={img} alt={`Preview ${idx + 1}`} style={{ width: '100%', height: '100px', objectFit: 'cover' }} />
-                        <button type="button" onClick={() => setImages(prev => prev.filter((_, i) => i !== idx))}
-                          style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(255,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
+
 
             {/* ── Pricing Mode Toggle ── */}
             <div className="profile-card">
@@ -1151,9 +1202,132 @@ function AddProductContent() {
               )}
             </div>
 
+            {/* ── Product Images ── */}
+            <div className="profile-card">
+              <h3>Product Images</h3>
+              {pricingMode === 'fixed' ? (
+                <>
+                  <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>
+                    Upload images for this product. Click <strong>Set as Main</strong> to choose the cover photo shown in listings.
+                  </p>
+                  <div style={{ display: 'flex', gap: 'var(--space-md)', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleImageUpload} />
+                    {uploading && <span className="spinner"></span>}
+                  </div>
+                  <div style={{ marginBottom: 'var(--space-sm)' }}>
+                    <button
+                      type="button"
+                      onClick={() => openFramePicker(null)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '8px',
+                        padding: '8px 16px', background: 'var(--color-bg-light)',
+                        border: '1.5px dashed var(--color-accent)', borderRadius: 'var(--radius-md)',
+                        color: 'var(--color-accent)', fontSize: '13px', fontWeight: 600,
+                        cursor: 'pointer', transition: 'all 0.2s',
+                      }}
+                    >
+                      🖼 Pick from Frame Composer
+                    </button>
+                  </div>
+                  {images.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
+                      {images.map((img, idx) => (
+                        <div key={idx} style={{
+                          position: 'relative', border: `2px solid ${mainPhotoIndex === idx ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                          borderRadius: 'var(--radius-sm)', overflow: 'hidden', transition: 'border-color 0.2s',
+                        }}>
+                          <img src={img} alt={`Preview ${idx + 1}`} style={{ width: '100%', height: '110px', objectFit: 'cover', display: 'block' }} />
+                          {mainPhotoIndex === idx && (
+                            <div style={{ position: 'absolute', top: '4px', left: '4px', background: 'var(--color-accent)', color: '#fff', fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px' }}>★ Main</div>
+                          )}
+                          <div style={{ display: 'flex', gap: '4px', padding: '6px' }}>
+                            <button type="button" onClick={() => setMainPhotoIndex(idx)}
+                              style={{ flex: 1, fontSize: '11px', padding: '4px', border: `1px solid ${mainPhotoIndex === idx ? 'var(--color-accent)' : 'var(--color-border)'}`, borderRadius: '4px', background: mainPhotoIndex === idx ? 'rgba(var(--color-accent-rgb,100,80,60),0.1)' : 'none', color: mainPhotoIndex === idx ? 'var(--color-accent)' : 'var(--color-text-secondary)', cursor: 'pointer', fontWeight: mainPhotoIndex === idx ? 700 : 400 }}>
+                              {mainPhotoIndex === idx ? '★ Main' : 'Set Main'}
+                            </button>
+                            <button type="button" onClick={() => { setImages(prev => prev.filter((_, i) => i !== idx)); if (mainPhotoIndex === idx) setMainPhotoIndex(0); else if (mainPhotoIndex > idx) setMainPhotoIndex(prev => prev - 1); }}
+                              style={{ width: '28px', fontSize: '14px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'none', cursor: 'pointer', color: 'var(--color-error)' }}>×</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {images.length === 0 && (
+                    <p className="text-sm text-muted" style={{ marginTop: 'var(--space-sm)' }}>No images uploaded yet.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>
+                    Upload separate images for each variant combination. Click <strong>Set as Main</strong> to select the cover photo for each variant.
+                    {calculatedPrices.length === 0 && <span style={{ color: 'var(--color-error)', marginLeft: '6px' }}>Configure sizes and materials above first.</span>}
+                  </p>
+                  {calculatedPrices.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+                      {calculatedPrices.map(p => {
+                        const imgs = comboImages[p.combo] || [];
+                        const mainIdx = comboMainPhoto[p.combo] || 0;
+                        return (
+                          <div key={p.combo} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--space-md)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-sm)' }}>
+                              <div>
+                                <strong style={{ fontSize: '14px' }}>{p.combo}</strong>
+                                <span className="text-xs text-muted" style={{ marginLeft: '8px' }}>{imgs.length} image{imgs.length !== 1 ? 's' : ''}</span>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                {comboUploading[p.combo] && <span className="spinner"></span>}
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: 'var(--color-bg-light)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                                  📁 Upload
+                                  <input type="file" accept="image/jpeg,image/png,image/webp" multiple style={{ display: 'none' }} onChange={e => handleComboImageUpload(p.combo, e)} />
+                                </label>
+                                <button type="button" onClick={() => openFramePicker(p.combo)}
+                                  style={{ padding: '6px 12px', background: 'var(--color-bg-light)', border: '1.5px dashed var(--color-accent)', borderRadius: 'var(--radius-md)', color: 'var(--color-accent)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                                  🖼 Frame Composer
+                                </button>
+                              </div>
+                            </div>
+                            {imgs.length > 0 ? (
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', marginTop: 'var(--space-sm)' }}>
+                                {imgs.map((img, idx) => (
+                                  <div key={idx} style={{
+                                    position: 'relative', border: `2px solid ${mainIdx === idx ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                                    borderRadius: 'var(--radius-sm)', overflow: 'hidden', transition: 'border-color 0.2s',
+                                  }}>
+                                    <img src={img} alt={`${p.combo} ${idx + 1}`} style={{ width: '100%', height: '100px', objectFit: 'cover', display: 'block' }} />
+                                    {mainIdx === idx && (
+                                      <div style={{ position: 'absolute', top: '4px', left: '4px', background: 'var(--color-accent)', color: '#fff', fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px' }}>★ Main</div>
+                                    )}
+                                    <div style={{ display: 'flex', gap: '4px', padding: '5px' }}>
+                                      <button type="button" onClick={() => setComboMainPhoto(prev => ({ ...prev, [p.combo]: idx }))}
+                                        style={{ flex: 1, fontSize: '10px', padding: '3px', border: `1px solid ${mainIdx === idx ? 'var(--color-accent)' : 'var(--color-border)'}`, borderRadius: '4px', background: mainIdx === idx ? 'rgba(var(--color-accent-rgb,100,80,60),0.1)' : 'none', color: mainIdx === idx ? 'var(--color-accent)' : 'var(--color-text-secondary)', cursor: 'pointer', fontWeight: mainIdx === idx ? 700 : 400 }}>
+                                        {mainIdx === idx ? '★ Main' : 'Set Main'}
+                                      </button>
+                                      <button type="button" onClick={() => {
+                                        setComboImages(prev => ({ ...prev, [p.combo]: (prev[p.combo] || []).filter((_, i) => i !== idx) }));
+                                        if (mainIdx === idx) setComboMainPhoto(prev => ({ ...prev, [p.combo]: 0 }));
+                                        else if (mainIdx > idx) setComboMainPhoto(prev => ({ ...prev, [p.combo]: mainIdx - 1 }));
+                                      }}
+                                        style={{ width: '26px', fontSize: '13px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'none', cursor: 'pointer', color: 'var(--color-error)' }}>×</button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted" style={{ marginTop: '4px' }}>No images for this variant yet.</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             {/* ── Manual Specs (Fixed mode only) ── */}
             {pricingMode === 'fixed' && (
               <div className="profile-card">
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-lg)' }}>
                   <h3 style={{ margin: 0 }}>Product Specifications</h3>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={addSpec}>+ Add Specification</button>
@@ -1214,25 +1388,81 @@ function AddProductContent() {
             {/* ── Shipping & Dimensions ── */}
             <div className="profile-card">
               <h3>Shipping Metrics</h3>
-              <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>Required for automated courier assignment and accurate shipping rates.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-md)' }}>
-                <div className="form-group">
-                  <label>Weight (kg)</label>
-                  <input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.5" />
-                </div>
-                <div className="form-group">
-                  <label>Length (cm)</label>
-                  <input type="number" step="1" value={length} onChange={e => setLength(e.target.value)} placeholder="30" />
-                </div>
-                <div className="form-group">
-                  <label>Width (cm)</label>
-                  <input type="number" step="1" value={width} onChange={e => setWidth(e.target.value)} placeholder="20" />
-                </div>
-                <div className="form-group">
-                  <label>Height (cm)</label>
-                  <input type="number" step="1" value={height} onChange={e => setHeight(e.target.value)} placeholder="5" />
-                </div>
-              </div>
+              {pricingMode === 'fixed' ? (
+                <>
+                  <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>Required for automated courier assignment and accurate shipping rates.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-md)' }}>
+                    <div className="form-group">
+                      <label>Weight (kg)</label>
+                      <input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.5" />
+                    </div>
+                    <div className="form-group">
+                      <label>Length (cm)</label>
+                      <input type="number" step="1" value={length} onChange={e => setLength(e.target.value)} placeholder="30" />
+                    </div>
+                    <div className="form-group">
+                      <label>Width (cm)</label>
+                      <input type="number" step="1" value={width} onChange={e => setWidth(e.target.value)} placeholder="20" />
+                    </div>
+                    <div className="form-group">
+                      <label>Height (cm)</label>
+                      <input type="number" step="1" value={height} onChange={e => setHeight(e.target.value)} placeholder="5" />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-muted" style={{ marginBottom: 'var(--space-md)' }}>Shipping metrics are automatically calculated based on product size.</p>
+                  {validSizes.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+                      {validSizes.map((sz, i) => {
+                        const wCm = parseFloat(sz.widthCm) || 0;
+                        const hCm = parseFloat(sz.heightCm) || 0;
+                        const l = Math.max(wCm, hCm) + 5;
+                        const w = Math.min(wCm, hCm) + 5;
+                        const h = 8;
+                        const vol = l * w * h;
+                        const wt = vol * 0.20708;
+                        const label = sz.label.trim() || autoLabel(sz.widthCm, sz.heightCm);
+
+                        // Find how many items/combinations use this size
+                        const matchingPrices = calculatedPrices.filter(p => p.combo.includes(label));
+                        const itemCount = matchingPrices.length;
+                        if (itemCount === 0) return null; // Only show if materials are selected
+                        
+                        const materials = matchingPrices.map(p => p.combo.split(' | ').slice(1).join(' | '));
+                        const uniqueMaterials = Array.from(new Set(materials));
+
+                        return (
+                          <div key={i} style={{ 
+                            padding: 'var(--space-sm) var(--space-md)', 
+                            background: 'var(--color-bg-light)', 
+                            border: '1px solid var(--color-border)', 
+                            borderRadius: 'var(--radius-sm)' 
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              <strong style={{ fontSize: '14px' }}>{label}</strong>
+                              <span className="text-xs text-muted" style={{ fontWeight: 500 }}>
+                                Weight: {(wt / 1000).toFixed(2)} kg
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted" style={{ marginBottom: '8px' }}>
+                              Dimensions: {l}cm (L) × {w}cm (W) × {h}cm (H)
+                            </div>
+                            <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                              Applies to {itemCount} item{itemCount !== 1 ? 's' : ''}: {uniqueMaterials.join(', ')}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="empty-state" style={{ padding: 'var(--space-md)' }}>
+                      <p className="text-sm">Please add product sizes above to see calculated shipping metrics.</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* ── Inventory ── */}

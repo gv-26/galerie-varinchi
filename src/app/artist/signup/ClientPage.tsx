@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import jsPDF from 'jspdf';
 import { resizeImage } from '@/lib/image-utils';
-import { ARTIST_AGREEMENT_TEXT, GV_LOGO_BASE64, GV_SIGNATURE_BASE64 } from '@/constants/agreement';
-
-const ARTIST_AGREEMENT_VERSION = 'v1.0';
+import { GV_SIGNATURE_BASE64 } from '@/constants/agreement';
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -56,6 +54,11 @@ export default function ArtistSignUpPage() {
   const [userIp, setUserIp] = useState('');
   const tcContainerRef = useRef<HTMLDivElement>(null);
 
+  // Live agreement version from DB
+  const [activeAgreement, setActiveAgreement] = useState<{ id: string; versionNumber: string; content: string } | null>(null);
+  const agreementText = activeAgreement?.content || '';
+  const agreementVersion = activeAgreement ? `v${activeAgreement.versionNumber}` : 'v1.0';
+
   // OTP
   const [otp, setOtp] = useState('');
 
@@ -65,6 +68,14 @@ export default function ArtistSignUpPage() {
       .then(r => r.json())
       .then(data => setUserIp(data.ip || ''))
       .catch(() => setUserIp('unknown'));
+  }, []);
+
+  // Fetch the active agreement version
+  useEffect(() => {
+    fetch('/api/agreements/active')
+      .then(r => r.json())
+      .then(data => { if (data.version) setActiveAgreement(data.version); })
+      .catch(() => {});
   }, []);
 
   // --- Multi-file upload handlers ---
@@ -105,6 +116,15 @@ export default function ArtistSignUpPage() {
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
     if (atBottom) setHasScrolledToEnd(true);
   };
+
+  useEffect(() => {
+    const el = tcContainerRef.current;
+    if (el && agreementText) {
+      if (el.scrollHeight <= el.clientHeight) {
+        setHasScrolledToEnd(true);
+      }
+    }
+  }, [agreementText]);
 
   const handleSignaturePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,15 +196,7 @@ export default function ArtistSignUpPage() {
     const pageHeight = doc.internal.pageSize.getHeight();
     const textWidth = pageWidth - (margin * 2);
 
-    let y = margin;
-
-    // Logo
-    if (GV_LOGO_BASE64) {
-      try {
-        doc.addImage(`data:image/jpeg;base64,${GV_LOGO_BASE64}`, 'JPEG', (pageWidth - 100) / 2, y, 100, 40);
-        y += 60;
-      } catch (e) { console.error('Logo add error', e); }
-    }
+    let y = margin + 20;
 
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
@@ -193,7 +205,7 @@ export default function ArtistSignUpPage() {
 
     doc.setFontSize(9);
     doc.setFont('times', 'normal');
-    const lines = doc.splitTextToSize(ARTIST_AGREEMENT_TEXT, textWidth);
+    const lines = doc.splitTextToSize(agreementText, textWidth);
     for (const line of lines) {
       if (y > pageHeight - margin) {
         doc.addPage();
@@ -370,7 +382,7 @@ export default function ArtistSignUpPage() {
         fullName, email, phone, country, state, area, portfolioLink, bio, specialization,
         agreementTimestamp: new Date().toISOString(),
         agreementIp: userIp,
-        agreementVersion: ARTIST_AGREEMENT_VERSION,
+        agreementVersion: agreementVersion,
         profilePhotoUrl,
         agreementPdfUrl,
         signatureImageUrl,
@@ -611,7 +623,7 @@ export default function ArtistSignUpPage() {
                   marginBottom: 'var(--space-md)',
                 }}
               >
-                {ARTIST_AGREEMENT_TEXT}
+                {agreementText || 'Loading agreement…'}
               </div>
 
               {!hasScrolledToEnd && (
@@ -623,7 +635,7 @@ export default function ArtistSignUpPage() {
               <label style={{
                 display: 'flex',
                 alignItems: 'flex-start',
-                gap: 'var(--space-sm)',
+                gap: '12px',
                 marginBottom: 'var(--space-md)',
                 opacity: hasScrolledToEnd ? 1 : 0.5,
                 cursor: hasScrolledToEnd ? 'pointer' : 'not-allowed',
@@ -633,9 +645,9 @@ export default function ArtistSignUpPage() {
                   checked={agreedToTerms}
                   onChange={e => hasScrolledToEnd && setAgreedToTerms(e.target.checked)}
                   disabled={!hasScrolledToEnd}
-                  style={{ marginTop: '3px' }}
+                  style={{ marginTop: '3px', flexShrink: 0, width: '16px', height: '16px' }}
                 />
-                <span className="text-sm">
+                <span className="text-sm" style={{ lineHeight: '1.4' }}>
                   I have read, understood, and agree to the commission splits, licensing terms, and proprietary rights outlined in the Artist Agreement.
                 </span>
               </label>

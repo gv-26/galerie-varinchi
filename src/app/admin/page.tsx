@@ -211,6 +211,14 @@ export default function AdminPage() {
               <span className="btn btn-accent btn-sm">Open Frame Composer →</span>
             </div>
           </Link>
+
+          <Link href="/admin/agreements" className="profile-card" style={{ textDecoration: 'none', transition: 'box-shadow 0.2s' }}>
+            <h3 style={{ marginBottom: 'var(--space-sm)' }}>Artist Agreement</h3>
+            <p className="text-sm text-muted">Manage agreement versions, publish updates, and track artist signatures</p>
+            <div style={{ marginTop: 'var(--space-md)' }}>
+              <span className="btn btn-secondary btn-sm">Manage Agreement →</span>
+            </div>
+          </Link>
         </div>
       </div>
     </div>

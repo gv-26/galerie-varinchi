@@ -202,3 +202,75 @@ export async function sendArtistApprovalEmail(artistEmail: string, artistName: s
     `
   );
 }
+
+export async function sendNewAgreementNotificationEmail(
+  artistEmail: string,
+  artistName: string,
+  versionNumber: string,
+  dashboardUrl: string
+): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [NEW AGREEMENT] Notify ${artistEmail} of version ${versionNumber}`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    artistEmail,
+    `Action Required: Updated Artist Agreement — Galerie Varinchi`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">Dear ${artistName},</p>
+        <p style="color: #333;">We have published a new version of the <strong>Artist Collaboration Agreement</strong> (Version ${versionNumber}).</p>
+        <p style="color: #666; font-size: 14px;">
+          As a valued artist on our platform, you are required to read and sign the updated agreement before submitting new artworks.
+        </p>
+        <p style="color: #666; font-size: 14px;">
+          Please log in to your Artist Dashboard where you will be prompted to review and sign the agreement.
+        </p>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${dashboardUrl}" style="background: #1a1a1a; color: white; padding: 12px 28px; border-radius: 4px; text-decoration: none; font-size: 14px; letter-spacing: 1px;">
+            Review &amp; Sign Agreement
+          </a>
+        </div>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px; text-align: center;">Galerie Varinchi · Artist Platform</p>
+      </div>
+    `
+  );
+}
+
+export async function sendSignedAgreementEmail(
+  artistEmail: string,
+  artistName: string,
+  versionNumber: string,
+  agreementPdfUrl: string
+): Promise<void> {
+  const apiKey = getSecret('RESEND_API_KEY');
+  if (!apiKey) {
+    console.log(`\n========================================`);
+    console.log(`  [SIGNED AGREEMENT] Sent to ${artistEmail} for v${versionNumber}`);
+    console.log(`========================================\n`);
+    return;
+  }
+
+  await sendEmail(
+    artistEmail,
+    `Confirmation: Signed Artist Agreement v${versionNumber} - Galerie Varinchi`,
+    `
+      <div style="font-family: 'Helvetica Neue', sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <h2 style="font-weight: 300; letter-spacing: 2px; color: #1a1a1a; text-align: center;">GALERIE VARINCHI</h2>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #333;">Dear ${artistName},</p>
+        <p style="color: #333;">Thank you for signing the updated <strong>Artist Collaboration Agreement (Version ${versionNumber})</strong>.</p>
+        <p style="color: #666; font-size: 14px;">Your signed collaboration agreement is available for your records here: <a href="${agreementPdfUrl}">Download Agreement</a></p>
+        <p style="color: #666; font-size: 14px;">You can also access this at any time from your Artist Profile page.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      </div>
+    `
+  );
+}

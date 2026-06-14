@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { resizeImage } from '@/lib/image-utils';
+import jsPDF from 'jspdf';
+import { GV_SIGNATURE_BASE64 } from '@/constants/agreement';
 
 interface ArtistProfile {
   id: string;
   fullName: string;
+  email: string;
   status: string;
 }
 
@@ -26,6 +30,13 @@ interface Wallet {
   pendingBalance: number;
 }
 
+interface PendingVersion {
+  id: string;
+  versionNumber: string;
+  title: string;
+  content: string;
+}
+
 export default function ArtistDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -43,8 +54,28 @@ export default function ArtistDashboardPage() {
   const [totalEarned, setTotalEarned] = useState(0);
   const [totalSales, setTotalSales] = useState(0);
 
+  // Re-agreement
+  const [pendingVersion, setPendingVersion] = useState<PendingVersion | null>(null);
+  const [agreementLoading, setAgreementLoading] = useState(false);
+  const [agreementError, setAgreementError] = useState('');
+  const [agreementSuccess, setAgreementSuccess] = useState(false);
+  const [hasScrolledToEnd, setHasScrolledToEnd] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [signatureImage, setSignatureImage] = useState<File | null>(null);
+  const [signaturePreview, setSignaturePreview] = useState('');
+  const signatureInputRef = useRef<HTMLInputElement>(null);
+  const tcContainerRef = useRef<HTMLDivElement>(null);
+  const [userIp, setUserIp] = useState('');
+
   useEffect(() => {
-    fetch('/api/artist/profile')
+    fetch('https://api.ipify.org?format=json')
+      .then(r => r.json())
+      .then(data => setUserIp(data.ip || ''))
+      .catch(() => setUserIp('unknown'));
+  }, []);
+
+  useEffect(() => {
+    fetch(`/api/artist/profile?t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
         if (!data.profile) { router.push('/artist/signup'); return; }
@@ -52,6 +83,7 @@ export default function ArtistDashboardPage() {
         if (data.profile.status === 'APPROVED') {
           fetchArtRequests();
           fetchWallet();
+          checkPendingAgreement();
         }
         setLoading(false);
       })
@@ -59,7 +91,7 @@ export default function ArtistDashboardPage() {
   }, [router]);
 
   const fetchArtRequests = () => {
-    fetch('/api/artist/art-requests')
+    fetch(`/api/artist/art-requests?t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
         const arts = data.requests || [];
@@ -80,7 +112,163 @@ export default function ArtistDashboardPage() {
       });
   };
 
-  if (loading) return <div className="page-content" style={{ textAlign: 'center' }}><div className="spinner"></div></div>;
+  const checkPendingAgreement = () => {
+    fetch(`/api/artist/agreements/pending?t=${Date.now()}`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        console.log('Pending agreement data:', data);
+        if (data.pendingVersion) setPendingVersion(data.pendingVersion); 
+      })
+      .catch(e => { console.error('Failed to fetch pending agreement:', e); });
+  };
+
+  const handleTcScroll = () => {
+    const el = tcContainerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    if (atBottom) setHasScrolledToEnd(true);
+  };
+
+  useEffect(() => {
+    const el = tcContainerRef.current;
+    if (el && pendingVersion) {
+      if (el.scrollHeight <= el.clientHeight) {
+        setHasScrolledToEnd(true);
+      }
+    }
+  }, [pendingVersion]);
+
+  const handleSignatureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.match(/^image\/(jpeg|png|jpg)$/)) {
+      setAgreementError('Signature must be a JPG or PNG image.');
+      return;
+    }
+    try {
+      const finalFile = await resizeImage(file);
+      setSignatureImage(finalFile);
+      setSignaturePreview(URL.createObjectURL(finalFile));
+      setAgreementError('');
+    } catch {
+      setAgreementError('Failed to process signature image.');
+    }
+  };
+
+  const generateSignedPDF = async (version: PendingVersion, fullName: string): Promise<Blob> => {
+    const doc = new jsPDF({ format: 'a4', unit: 'pt' });
+    const margin = 40;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const textWidth = pageWidth - margin * 2;
+    let y = margin + 20;
+
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(version.title.toUpperCase(), pageWidth / 2, y, { align: 'center' });
+    y += 12;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Version ${version.versionNumber}`, pageWidth / 2, y + 10, { align: 'center' });
+    y += 40;
+
+    doc.setFontSize(9);
+    doc.setFont('times', 'normal');
+    const lines = doc.splitTextToSize(version.content, textWidth);
+    for (const line of lines) {
+      if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+      doc.text(line, margin, y);
+      y += 12;
+    }
+
+    y += 40;
+    if (y > pageHeight - 180) { doc.addPage(); y = margin; }
+
+    const colWidth = textWidth / 2;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Artist', margin, y);
+    doc.text('Galerie Varinchi', margin + colWidth, y);
+    y += 20;
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Name: ${fullName}`, margin, y);
+    doc.text('Name: Nikhil George', margin + colWidth, y);
+    y += 20;
+
+    if (signaturePreview) {
+      try { doc.addImage(signaturePreview, 'PNG', margin, y, 100, 40); } catch {}
+    }
+    if (GV_SIGNATURE_BASE64) {
+      try { doc.addImage(`data:image/jpeg;base64,${GV_SIGNATURE_BASE64}`, 'JPEG', margin + colWidth, y, 100, 40); } catch {}
+    }
+    y += 50;
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, y);
+    doc.text('Date: May 3 - 2026', margin + colWidth, y);
+    y += 20;
+    doc.setFontSize(8);
+    doc.text(`IP: ${userIp}`, margin, y);
+
+    return doc.output('blob');
+  };
+
+  const handleSignAgreement = async () => {
+    if (!pendingVersion || !profile) return;
+    if (!hasScrolledToEnd) { setAgreementError('Please scroll to the bottom of the agreement.'); return; }
+    if (!agreedToTerms) { setAgreementError('Please check the agreement checkbox.'); return; }
+    if (!signatureImage) { setAgreementError('Please upload your signature image.'); return; }
+
+    setAgreementLoading(true);
+    setAgreementError('');
+    try {
+      // Upload signature
+      const sigPresigned = await fetch('/api/upload/presigned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: signatureImage.name, contentType: signatureImage.type }),
+      }).then(r => r.json());
+      await fetch(sigPresigned.uploadUrl, { method: 'PUT', headers: { 'Content-Type': signatureImage.type }, body: signatureImage });
+      const signatureImageUrl = sigPresigned.finalUrl;
+
+      // Generate and upload signed PDF
+      const pdfBlob = await generateSignedPDF(pendingVersion, profile.fullName);
+      const pdfFile = new File([pdfBlob], `agreement-v${pendingVersion.versionNumber}-${Date.now()}.pdf`, { type: 'application/pdf' });
+      const pdfPresigned = await fetch('/api/upload/presigned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: pdfFile.name, contentType: pdfFile.type }),
+      }).then(r => r.json());
+      await fetch(pdfPresigned.uploadUrl, { method: 'PUT', headers: { 'Content-Type': pdfFile.type }, body: pdfFile });
+      const agreementPdfUrl = pdfPresigned.finalUrl;
+
+      // Record consent in DB
+      const res = await fetch('/api/artist/agreements/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agreementVersionId: pendingVersion.id,
+          signatureImageUrl,
+          agreementPdfUrl,
+          ipAddress: userIp,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to record agreement consent.');
+      setAgreementSuccess(true);
+      setTimeout(() => {
+        setPendingVersion(null);
+        setAgreementSuccess(false);
+        setHasScrolledToEnd(false);
+        setAgreedToTerms(false);
+        setSignatureImage(null);
+        setSignaturePreview('');
+      }, 2500);
+    } catch (err: any) {
+      setAgreementError(err.message || 'Something went wrong.');
+    } finally {
+      setAgreementLoading(false);
+    }
+  };
+
+  if (loading) return <div className="page-content" style={{ textAlign: 'center' }}><div className="spinner" /></div>;
   if (error || !profile) return <div className="page-content alert alert-error">{error || 'Unable to access dashboard'}</div>;
 
   if (profile.status === 'PENDING') {
@@ -120,6 +308,152 @@ export default function ArtistDashboardPage() {
 
   return (
     <div className="page-content fade-in">
+      {/* ── Re-Agreement Modal Overlay ── */}
+      {pendingVersion && !agreementSuccess && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '24px',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: 'var(--color-bg)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.4)',
+            width: '100%', maxWidth: '700px', maxHeight: '90vh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '24px 28px',
+              borderBottom: '1px solid var(--color-border)',
+              background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
+              color: 'white',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '28px' }}>📜</span>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>Updated Artist Agreement</h2>
+              </div>
+              <p style={{ margin: 0, fontSize: '13px', opacity: 0.8 }}>
+                A new version of the Artist Collaboration Agreement (v{pendingVersion.versionNumber}) has been published.
+                Please read and sign it to continue submitting artworks.
+              </p>
+            </div>
+
+            {/* Scrollable content */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+              <p className="text-xs text-muted" style={{ marginBottom: '12px' }}>
+                Scroll to the bottom of the agreement to proceed.
+              </p>
+              <div
+                ref={tcContainerRef}
+                onScroll={handleTcScroll}
+                style={{
+                  height: '280px', overflowY: 'auto',
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+                  padding: 'var(--space-md)', background: 'var(--color-bg-light)',
+                  whiteSpace: 'pre-wrap', fontSize: '12px', lineHeight: 1.7,
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: 'var(--space-md)',
+                }}
+              >
+                {pendingVersion.content}
+              </div>
+
+              {!hasScrolledToEnd && (
+                <p className="text-xs" style={{ color: 'var(--color-warning)', marginBottom: 'var(--space-sm)' }}>
+                  ↓ Scroll to the bottom of the agreement to enable signing
+                </p>
+              )}
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                marginBottom: 'var(--space-md)',
+                opacity: hasScrolledToEnd ? 1 : 0.5,
+                cursor: hasScrolledToEnd ? 'pointer' : 'not-allowed',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={e => hasScrolledToEnd && setAgreedToTerms(e.target.checked)}
+                  disabled={!hasScrolledToEnd}
+                  style={{ marginTop: '3px', flexShrink: 0, width: '16px', height: '16px' }}
+                />
+                <span className="text-sm" style={{ lineHeight: '1.4' }}>
+                  I have read, understood, and agree to the updated Artist Agreement (v{pendingVersion.versionNumber}).
+                </span>
+              </label>
+
+              <div className="form-group" style={{
+                marginBottom: 'var(--space-md)',
+                opacity: hasScrolledToEnd && agreedToTerms ? 1 : 0.4,
+                pointerEvents: hasScrolledToEnd && agreedToTerms ? 'auto' : 'none',
+              }}>
+                <label>Physical Signature Upload (JPG/PNG)</label>
+                {signaturePreview ? (
+                  <div style={{ position: 'relative', width: '200px', height: '100px', border: '1px solid var(--color-border)', borderRadius: '4px', overflow: 'hidden', background: '#fff' }}>
+                    <img src={signaturePreview} alt="Signature" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    <button type="button" onClick={() => { setSignatureImage(null); setSignaturePreview(''); }}
+                      style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(255,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer' }}>×</button>
+                  </div>
+                ) : (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => signatureInputRef.current?.click()} style={{ width: 'fit-content' }}>
+                    Upload Signature Image
+                  </button>
+                )}
+                <input ref={signatureInputRef} type="file" accept="image/jpeg,image/png,image/jpg" onChange={handleSignatureChange} style={{ display: 'none' }} />
+                <p className="text-xs text-muted" style={{ marginTop: '6px' }}>Upload a clear photo of your signature on white paper.</p>
+              </div>
+
+              {agreementError && (
+                <div className="alert alert-error" style={{ marginBottom: 'var(--space-md)' }}>{agreementError}</div>
+              )}
+            </div>
+
+            {/* Footer actions */}
+            <div style={{
+              padding: '20px 28px',
+              borderTop: '1px solid var(--color-border)',
+              background: 'var(--color-bg-light)',
+              display: 'flex', gap: '12px', alignItems: 'center',
+            }}>
+              <button
+                id="sign-agreement-btn"
+                className="btn btn-primary"
+                onClick={handleSignAgreement}
+                disabled={agreementLoading || !hasScrolledToEnd || !agreedToTerms || !signatureImage}
+              >
+                {agreementLoading ? <><span className="spinner" /> Signing…</> : '✍️ Sign & Submit Agreement'}
+              </button>
+              <p className="text-xs text-muted">
+                A signed copy will be emailed to you and saved on your profile.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agreement success flash */}
+      {agreementSuccess && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--color-bg)', borderRadius: 'var(--radius-lg)',
+            padding: '48px', textAlign: 'center', maxWidth: '400px',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ fontSize: '64px', marginBottom: '16px' }}>✅</div>
+            <h2 style={{ margin: '0 0 8px' }}>Agreement Signed!</h2>
+            <p className="text-muted">Thank you. A signed copy will be emailed to you shortly.</p>
+          </div>
+        </div>
+      )}
+
       <div className="container">
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2xl)' }}>
@@ -127,8 +461,39 @@ export default function ArtistDashboardPage() {
             <h1 className="heading-serif" style={{ fontSize: '32px' }}>Artist Dashboard</h1>
             <p className="text-muted">Welcome back, {profile.fullName}</p>
           </div>
-          <Link href="/artist/submit-art" className="btn btn-primary">+ Submit New Artwork</Link>
+          {pendingVersion ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--color-warning)', fontWeight: 600 }}>
+                ⚠️ Agreement signature required
+              </span>
+              <span className="btn btn-primary btn-sm" style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+                + Submit New Artwork
+              </span>
+            </div>
+          ) : (
+            <Link href="/artist/submit-art" className="btn btn-primary">+ Submit New Artwork</Link>
+          )}
         </div>
+
+        {/* Pending agreement banner */}
+        {pendingVersion && (
+          <div style={{
+            background: 'linear-gradient(135deg, #7c5a00 0%, #c49200 100%)',
+            color: 'white',
+            padding: 'var(--space-md) var(--space-lg)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-xl)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <div>
+              <strong>📜 New Agreement Requires Your Signature</strong>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', opacity: 0.9 }}>
+                Version {pendingVersion.versionNumber} of the Artist Collaboration Agreement has been published. 
+                Please sign it to continue submitting artworks. Check the pop-up that appeared on your screen.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Wallet Section */}
         <div style={{ marginBottom: 'var(--space-2xl)' }}>
@@ -137,7 +502,6 @@ export default function ArtistDashboardPage() {
             <Link href="/artist/edit-profile" className="btn btn-secondary btn-sm">Manage Bank Details</Link>
           </div>
 
-          {/* Balance Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-lg)', marginBottom: 'var(--space-xl)' }}>
             <div className="profile-card" style={{ background: 'linear-gradient(135deg, #0f4c2a 0%, #1a7a45 100%)', color: 'white', border: 'none' }}>
               <p style={{ fontSize: '12px', opacity: 0.8, marginBottom: 'var(--space-xs)', letterSpacing: '1px' }}>AVAILABLE BALANCE</p>
@@ -156,7 +520,6 @@ export default function ArtistDashboardPage() {
             </div>
           </div>
 
-          {/* Sales Table */}
           <div className="profile-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: 'var(--space-md) var(--space-lg)', borderBottom: '1px solid var(--color-border)' }}>
               <h3 style={{ margin: 0 }}>Sales History</h3>
@@ -211,7 +574,7 @@ export default function ArtistDashboardPage() {
           </div>
         </div>
 
-        {/* Art Requests Section */}
+        {/* Art Requests */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-xl)' }}>
           <div className="profile-card">
             <h3>Pending Artwork Approvals ({pendingArts.length})</h3>

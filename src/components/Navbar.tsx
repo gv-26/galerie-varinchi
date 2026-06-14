@@ -45,11 +45,13 @@ export default function Navbar() {
         </button>
 
         <div className={`nav-categories ${menuOpen ? 'open' : ''}`}>
+          <Link href="/about" onClick={() => setMenuOpen(false)}>About</Link>
           {categories.map(cat => (
             <Link key={cat.slug} href={`/category/${cat.slug}`} onClick={() => setMenuOpen(false)}>
               {cat.name}
             </Link>
           ))}
+          <Link href="/blogs" onClick={() => setMenuOpen(false)}>Journal</Link>
           {user?.isAdmin && (
             <Link href="/admin" onClick={() => setMenuOpen(false)} className="nav-mobile-only" style={{ position: 'relative' }}>
               Admin Dashboard
