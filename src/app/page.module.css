@@ -35,20 +35,20 @@
 }
 
 .heroTitle {
-  font-family: var(--font-serif);
+  font-family: 'Neue Augenblick', var(--font-sans);
   font-size: clamp(40px, 7vw, 72px);
-  font-weight: 300;
+  font-weight: 600;
   line-height: 0.95;
   letter-spacing: -0.04em;
   margin-bottom: var(--space-md);
-  color: var(--color-text);
+  color: #000000;
 }
 
 .heroText {
   font-size: 14px;
   max-width: 400px;
   line-height: 1.8;
-  color: var(--color-text-secondary);
+  color: #000000;
   margin-bottom: var(--space-2xl);
 }
 
