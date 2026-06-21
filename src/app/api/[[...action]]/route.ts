@@ -1167,6 +1167,163 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json(item);
     }
 
+    // Guest Checkout — no session, but guestDetails provided
+    if (action[0] === 'orders' && !user && body.guestDetails) {
+      const { name, email: guestEmail, phone, address } = body.guestDetails;
+      if (!guestEmail || !address) {
+        return NextResponse.json({ error: 'Email and address are required for guest checkout' }, { status: 400 });
+      }
+      const normalizedEmail = guestEmail.trim().toLowerCase();
+
+      // Find or create a passwordless guest user account
+      let guestUser = await db.query.user.findFirst({ where: eq(schema.user.email, normalizedEmail) });
+      if (!guestUser) {
+        [guestUser] = await db.insert(schema.user).values({
+          id: crypto.randomUUID(),
+          email: normalizedEmail,
+          name: name || null,
+          phone: phone || null,
+          address: address || null,
+          passwordHash: null,
+          isAdmin: false,
+        }).returning();
+      } else {
+        // Update name/phone/address if they're missing on existing guest account
+        if (!guestUser.name || !guestUser.phone || !guestUser.address) {
+          [guestUser] = await db.update(schema.user)
+            .set({
+              name: guestUser.name || name || null,
+              phone: guestUser.phone || phone || null,
+              address: guestUser.address || address || null,
+            })
+            .where(eq(schema.user.id, guestUser.id))
+            .returning();
+        }
+      }
+
+      // 1. Verify stock capacity
+      for (const item of body.items) {
+        const p = await db.query.product.findFirst({ where: eq(schema.product.id, item.productId) });
+        if (!p) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+        if (p.unitsAvailable !== null && p.unitsAvailable < item.quantity) {
+          return NextResponse.json({ error: `Not enough stock for ${p.title}. Only ${p.unitsAvailable} left.` }, { status: 400 });
+        }
+      }
+
+      // Coupon
+      let guestCouponId: string | null = null;
+      let guestDiscountAmount: number | null = null;
+      let guestSubtotal = body.items.reduce((sum: number, i: any) => sum + (i.price * i.quantity), 0);
+      if (body.couponCode) {
+        const c = await db.query.coupon.findFirst({ where: eq(schema.coupon.code, body.couponCode.toUpperCase().trim()) });
+        if (c && c.isActive && (!c.expiresAt || new Date(c.expiresAt).getTime() > Date.now())) {
+          guestCouponId = c.id;
+          guestDiscountAmount = Math.round((guestSubtotal * c.discountPercent / 100) * 100) / 100;
+          guestSubtotal = guestSubtotal - guestDiscountAmount;
+        }
+      }
+
+      const [guestOrder] = await db.insert(schema.order).values({
+        id: crypto.randomUUID(),
+        userId: guestUser.id,
+        status: 'NEW',
+        totalAmount: guestSubtotal,
+        customerName: name || null,
+        customerEmail: normalizedEmail,
+        customerPhone: phone || null,
+        customerAddress: address || null,
+        couponId: guestCouponId,
+        discountAmount: guestDiscountAmount,
+      }).returning();
+
+      const guestOrderItems = body.items.map((i: any) => ({
+        id: crypto.randomUUID(),
+        orderId: guestOrder.id,
+        productId: i.productId,
+        quantity: i.quantity,
+        price: i.price,
+        medium: i.medium,
+        frameType: i.frameType,
+        frameColor: i.frameColor,
+      }));
+      await db.insert(schema.orderItem).values(guestOrderItems);
+
+      // Decrement stock
+      for (const item of body.items) {
+        const p = await db.query.product.findFirst({ where: eq(schema.product.id, item.productId) });
+        if (p && p.unitsAvailable !== null) {
+          const newUnits = p.unitsAvailable - item.quantity;
+          await db.update(schema.product)
+            .set({ unitsAvailable: Math.max(0, newUnits), status: newUnits <= 0 ? 'inactive' : p.status })
+            .where(eq(schema.product.id, item.productId));
+        }
+      }
+
+      await sendOrderConfirmationEmail(normalizedEmail, guestOrder.id, guestOrder.totalAmount);
+      await sendOrderNotificationToAdmin(guestOrder.id, guestOrder.totalAmount, normalizedEmail);
+      await db.insert(schema.adminNotification).values({
+        id: crypto.randomUUID(),
+        title: 'New Guest Order Placed',
+        message: `Guest order ${guestOrder.id} for ₹${guestOrder.totalAmount} by ${normalizedEmail}`,
+        link: `/admin/orders?status=NEW`,
+        isRead: false
+      });
+
+      try {
+        await processCommissionForOrder(guestOrder.id);
+      } catch (err) {
+        console.error('Commission processing error for guest order', guestOrder.id, err);
+      }
+
+      // Shiprocket
+      try {
+        const srItems: any[] = [];
+        for (const item of body.items) {
+          const p = await db.query.product.findFirst({ where: eq(schema.product.id, item.productId) });
+          if (p) {
+            srItems.push({
+              name: p.title,
+              sku: p.id.substring(0, 8),
+              units: item.quantity,
+              selling_price: item.price,
+              weight: p.weight || 0.5,
+              length: p.length || 10,
+              width: p.width || 10,
+              height: p.height || 10
+            });
+          }
+        }
+        const srOrder = await createShiprocketOrder({
+          orderId: guestOrder.id,
+          orderDate: new Date().toISOString(),
+          customerName: name || 'Guest',
+          customerEmail: normalizedEmail,
+          customerPhone: phone || '9999999999',
+          customerAddress: address || 'India',
+          subTotal: guestSubtotal,
+          items: srItems
+        });
+        let awbNumber = null, courierName = null, courierId = null;
+        const awbData = await assignAWB(srOrder.shipmentId);
+        if (awbData) {
+          awbNumber = awbData.awbNumber;
+          courierName = awbData.courierName;
+          courierId = awbData.courierId;
+          await schedulePickup(srOrder.shipmentId);
+        }
+        await db.update(schema.order).set({
+          shiprocketOrderId: srOrder.shiprocketOrderId,
+          shiprocketShipmentId: srOrder.shipmentId,
+          awbNumber, courierName, courierId,
+          shippingStatus: awbNumber ? 'LABEL_GENERATED' : 'PENDING'
+        }).where(eq(schema.order.id, guestOrder.id));
+      } catch (err) {
+        console.error('Shiprocket creation error for guest order', guestOrder.id, err);
+      }
+
+      return NextResponse.json({ order: guestOrder, guestEmail: normalizedEmail });
+    }
+
     if (action[0] === 'orders' && user) {
       // 1. Verify stock capacity
       for (const item of body.items) {

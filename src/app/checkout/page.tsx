@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 
 export default function CheckoutPage() {
-  const router = useRouter();
   const { items, totalPrice, clearCart } = useCart();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
+  const [placedGuestEmail, setPlacedGuestEmail] = useState('');
 
   // Coupon state
   const [couponCode, setCouponCode] = useState('');
@@ -21,17 +20,14 @@ export default function CheckoutPage() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
 
-  if (!user) {
-    return (
-      <div className="page-content">
-        <div className="container empty-state">
-          <h2>Sign in to checkout</h2>
-          <p>You need to be signed in to place an order.</p>
-          <Link href="/auth/signin" className="btn btn-primary">Sign In</Link>
-        </div>
-      </div>
-    );
-  }
+  // Guest details state
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestAddress, setGuestAddress] = useState('');
+  const [guestErrors, setGuestErrors] = useState<Record<string, string>>({});
+
+  const isGuest = !user;
 
   if (items.length === 0 && !orderPlaced) {
     return (
@@ -55,10 +51,39 @@ export default function CheckoutPage() {
           <h2>Order Placed Successfully!</h2>
           <p>Order ID: {orderId}</p>
           <p className="text-muted text-sm">A confirmation has been sent to your email.</p>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', justifyContent: 'center', marginTop: 'var(--space-lg)' }}>
-            <Link href="/profile" className="btn btn-secondary">View Orders</Link>
-            <Link href="/" className="btn btn-primary">Continue Shopping</Link>
-          </div>
+
+          {isGuest && placedGuestEmail ? (
+            <div style={{
+              margin: 'var(--space-lg) auto 0 auto',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '12px',
+              padding: 'var(--space-md) var(--space-lg)',
+              textAlign: 'center',
+              maxWidth: '420px',
+            }}>
+              <p style={{ fontSize: '14px', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-sm)' }}>
+                Want to track this order later?
+              </p>
+              <Link
+                href={`/auth/set-password?email=${encodeURIComponent(placedGuestEmail)}`}
+                className="btn btn-secondary"
+              >
+                Create a password for your account →
+              </Link>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 'var(--space-md)', justifyContent: 'center', marginTop: 'var(--space-lg)' }}>
+              <Link href="/profile" className="btn btn-secondary">View Orders</Link>
+              <Link href="/" className="btn btn-primary">Continue Shopping</Link>
+            </div>
+          )}
+
+          {isGuest && (
+            <Link href="/" className="btn btn-ghost" style={{ marginTop: 'var(--space-md)' }}>
+              Continue Shopping
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -101,29 +126,56 @@ export default function CheckoutPage() {
     setCouponError('');
   };
 
+  const validateGuestFields = () => {
+    const errors: Record<string, string> = {};
+    if (!guestName.trim()) errors.name = 'Full name is required';
+    if (!guestEmail.trim()) errors.email = 'Email address is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) errors.email = 'Enter a valid email';
+    if (!guestPhone.trim()) errors.phone = 'Mobile number is required';
+    else if (!/^\d{10}$/.test(guestPhone.replace(/\s+/g, ''))) errors.phone = 'Enter a valid 10-digit mobile number';
+    if (!guestAddress.trim()) errors.address = 'Delivery address is required';
+    setGuestErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handlePlaceOrder = async () => {
+    if (isGuest && !validateGuestFields()) return;
+    if (!isGuest && !user?.address) return;
+
     setLoading(true);
     try {
+      const payload: any = {
+        items: items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          medium: item.medium,
+          frameType: item.frameType,
+          frameColor: item.frameColor,
+          price: item.price,
+        })),
+        couponCode: couponApplied ? couponCode.trim().toUpperCase() : undefined,
+        discountAmount,
+      };
+
+      if (isGuest) {
+        payload.guestDetails = {
+          name: guestName.trim(),
+          email: guestEmail.trim(),
+          phone: guestPhone.trim(),
+          address: guestAddress.trim(),
+        };
+      }
+
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: items.map(item => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            medium: item.medium,
-            frameType: item.frameType,
-            frameColor: item.frameColor,
-            price: item.price,
-          })),
-          couponCode: couponApplied ? couponCode.trim().toUpperCase() : undefined,
-          discountAmount,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         const data = await res.json();
         setOrderId(data.order.id);
+        if (data.guestEmail) setPlacedGuestEmail(data.guestEmail);
         setOrderPlaced(true);
         await clearCart();
       }
@@ -141,6 +193,67 @@ export default function CheckoutPage() {
           Checkout
         </h1>
 
+        {/* Guest Details */}
+        {isGuest && (
+          <div className="profile-card" style={{ marginBottom: 'var(--space-lg)' }}>
+            <h3>Your Details</h3>
+            <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-md)' }}>
+              No account needed — just fill in your details below.
+            </p>
+
+            <div className="form-group">
+              <label htmlFor="guest-name">Full Name</label>
+              <input
+                id="guest-name"
+                type="text"
+                value={guestName}
+                onChange={e => { setGuestName(e.target.value); setGuestErrors(prev => ({ ...prev, name: '' })); }}
+                placeholder="Your full name"
+              />
+              {guestErrors.name && <small style={{ color: 'var(--color-error)' }}>{guestErrors.name}</small>}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="guest-email">Email Address</label>
+              <input
+                id="guest-email"
+                type="email"
+                value={guestEmail}
+                onChange={e => { setGuestEmail(e.target.value); setGuestErrors(prev => ({ ...prev, email: '' })); }}
+                placeholder="your@email.com"
+              />
+              {guestErrors.email && <small style={{ color: 'var(--color-error)' }}>{guestErrors.email}</small>}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="guest-phone">Mobile Number</label>
+              <input
+                id="guest-phone"
+                type="tel"
+                value={guestPhone}
+                onChange={e => { setGuestPhone(e.target.value); setGuestErrors(prev => ({ ...prev, phone: '' })); }}
+                placeholder="10-digit mobile number"
+                maxLength={10}
+              />
+              {guestErrors.phone && <small style={{ color: 'var(--color-error)' }}>{guestErrors.phone}</small>}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="guest-address">Delivery Address</label>
+              <textarea
+                id="guest-address"
+                value={guestAddress}
+                onChange={e => { setGuestAddress(e.target.value); setGuestErrors(prev => ({ ...prev, address: '' })); }}
+                placeholder="Street, City, State, Pincode"
+                rows={3}
+                style={{ resize: 'vertical' }}
+              />
+              {guestErrors.address && <small style={{ color: 'var(--color-error)' }}>{guestErrors.address}</small>}
+            </div>
+          </div>
+        )}
+
+        {/* Order Summary */}
         <div className="profile-card">
           <h3>Order Summary</h3>
           {items.map(item => (
@@ -208,16 +321,19 @@ export default function CheckoutPage() {
           )}
         </div>
 
-        <div className="profile-card">
-          <h3>Delivery Address</h3>
-          {user.address ? (
-            <p className="text-sm">{user.address}</p>
-          ) : (
-            <p className="text-sm text-muted">
-              No address saved. <Link href="/profile" style={{ color: 'var(--color-accent)' }}>Add address</Link>
-            </p>
-          )}
-        </div>
+        {/* Delivery Address (authenticated users) */}
+        {!isGuest && (
+          <div className="profile-card">
+            <h3>Delivery Address</h3>
+            {user?.address ? (
+              <p className="text-sm">{user.address}</p>
+            ) : (
+              <p className="text-sm text-muted">
+                No address saved. <Link href="/profile" style={{ color: 'var(--color-accent)' }}>Add address</Link>
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="profile-card" style={{ background: '#fdf8ed', border: '1px solid #f0e4c3' }}>
           <h3 style={{ color: 'var(--color-warning)' }}>Payment</h3>
@@ -226,7 +342,7 @@ export default function CheckoutPage() {
           </p>
         </div>
 
-        {(!user.address) && (
+        {!isGuest && !user?.address && (
           <div className="alert alert-error" style={{ marginTop: 'var(--space-md)' }}>
             Please add a delivery address to your profile before placing an order.
           </div>
@@ -235,7 +351,7 @@ export default function CheckoutPage() {
         <button
           className="btn btn-primary btn-full"
           onClick={handlePlaceOrder}
-          disabled={loading || !user.address}
+          disabled={loading || (!isGuest && !user?.address)}
           style={{ marginTop: 'var(--space-lg)' }}
         >
           {loading ? <span className="spinner"></span> : `Place Order — ₹${finalTotal.toLocaleString()}`}
