@@ -64,11 +64,10 @@ export default async function Home() {
       <section className={styles.hero}>
         <div className={styles.heroImageContainer}>
           <img
-            src="/images/home-page-3.jpg"
+            src="/images/cover.png"
             alt="Close-up of mixed media artwork with gold leaf and ink"
             className={styles.heroImage}
           />
-          <div className={styles.heroOverlay} />
         </div>
         <div className={styles.heroContent}>
           <h1 className={styles.heroTitle}>
@@ -80,7 +79,7 @@ export default async function Home() {
             A curated marketplace connecting collectors with contemporary artists.
             Discover art prints, mixed media, photography &amp; handmade originals.
           </p>
-          <Link href="/category/art-prints" className="btn btn-primary" style={{ padding: '14px 36px', fontSize: '12px' }}>
+          <Link href="/category/art-prints" className="btn btn-white" style={{ padding: '14px 36px', fontSize: '12px' }}>
             Shop Now
           </Link>
         </div>
