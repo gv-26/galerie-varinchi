@@ -80,7 +80,17 @@ export default function SignInPage() {
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
+            <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Yet to create a password?{' '}
+              <Link
+                href={`/auth/set-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+                style={{ color: 'var(--color-accent)', fontWeight: 500 }}
+              >
+                Create password
+              </Link>
+            </p>
           </div>
+
           <button className="btn btn-primary btn-full" type="submit" disabled={loading}>
             {loading ? <span className="spinner"></span> : 'Sign In'}
           </button>
