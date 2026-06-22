@@ -1259,7 +1259,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      await sendOrderConfirmationEmail(normalizedEmail, guestOrder.id, guestOrder.totalAmount);
+      await sendOrderConfirmationEmail(normalizedEmail, guestOrder.id, guestOrder.totalAmount, true);
       await sendOrderNotificationToAdmin(guestOrder.id, guestOrder.totalAmount, normalizedEmail);
       await db.insert(schema.adminNotification).values({
         id: crypto.randomUUID(),

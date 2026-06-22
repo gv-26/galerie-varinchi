@@ -66,17 +66,42 @@ export async function sendOtpEmail(email: string, otp: string): Promise<void> {
 export async function sendOrderConfirmationEmail(
   email: string,
   orderId: string,
-  totalAmount: number
+  totalAmount: number,
+  isGuest?: boolean
 ): Promise<void> {
   const apiKey = getSecret('RESEND_API_KEY');
+  const cdnBase = (process.env.NEXT_PUBLIC_CLOUDFRONT_URL || "https://www.galerievarinchi.com")
+    .replace(/\/$/, '')
+    .replace(/\/assets$/, '');
+  const createPasswordUrl = `${cdnBase}/auth/set-password?email=${encodeURIComponent(email)}`;
+
   if (!apiKey) {
     console.log(`\n========================================`);
     console.log(`  Order confirmation for ${email}`);
     console.log(`  Order ID: ${orderId}`);
     console.log(`  Total: ₹${totalAmount}`);
+    if (isGuest) {
+      console.log(`  Guest Account: Create Password link: ${createPasswordUrl}`);
+    }
     console.log(`========================================\n`);
     return;
   }
+
+  const guestSection = isGuest ? `
+    <div style="background-color: #fcfbf9; border: 1px solid #e5e2dc; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
+      <p style="color: #333; font-size: 14px; margin: 0 0 12px 0; line-height: 1.5;">
+        Your order has been placed successfully. Set a password for your account using the link below to track this and any future orders.
+      </p>
+      <div style="margin: 16px 0;">
+        <a href="${createPasswordUrl}" style="background-color: #8b7355; color: white; padding: 10px 20px; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 500; display: inline-block; letter-spacing: 0.5px; text-transform: uppercase;">
+          Create Password
+        </a>
+      </div>
+      <p style="color: #666; font-size: 12px; margin: 0; line-height: 1.4;">
+        This will allow you to log in at any time to track your orders.
+      </p>
+    </div>
+  ` : '';
 
   await sendEmail(
     email,
@@ -88,6 +113,9 @@ export async function sendOrderConfirmationEmail(
         <p style="color: #333;">Thank you for your order!</p>
         <p style="color: #666; font-size: 14px;">Order ID: <strong>${orderId}</strong></p>
         <p style="color: #666; font-size: 14px;">Total Amount: <strong>₹${totalAmount.toLocaleString()}</strong></p>
+        
+        ${guestSection}
+        
         <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
         <p style="color: #999; font-size: 12px; text-align: center;">We'll notify you when your order ships.</p>
       </div>
