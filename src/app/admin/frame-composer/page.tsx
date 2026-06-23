@@ -143,7 +143,8 @@ async function uploadFilePresigned(file: File, prefix = 'frame'): Promise<string
 }
 
 /** Detect the bounding box of "green" pixels in an ImageData.
- *  Green heuristic: G > 140 AND G > R*1.4 AND G > B*1.4
+ *  Green heuristic: G > 140 AND G > R*1.35 AND G > B*1.35
+ *  No artificial padding — the bounding box is tight around actual green pixels.
  */
 function detectGreenBounds(imageData: ImageData): { minX: number; minY: number; maxX: number; maxY: number; count: number } | null {
   const { data, width, height } = imageData;
@@ -164,16 +165,120 @@ function detectGreenBounds(imageData: ImageData): { minX: number; minY: number; 
   }
 
   if (maxX === -1 || count < 100) return null;
-  // Expand bounds to ensure artwork covers the edge
-  const PAD = 4;
-  minX = Math.max(0, minX - PAD);
-  minY = Math.max(0, minY - PAD);
-  maxX = Math.min(width - 1, maxX + PAD);
-  maxY = Math.min(height - 1, maxY + PAD);
+  // No fixed padding — only green pixels define the bounds.
   return { minX, minY, maxX, maxY, count };
 }
 
-/** Replace green pixels in the frame canvas with pixels from the artwork canvas. */
+/**
+ * Compute a [0..1] "greenness" score for a pixel.
+ * 1.0 = solidly green, 0.0 = not green at all.
+ */
+function greenness(r: number, g: number, b: number): number {
+  const maxOther = Math.max(r, b);
+  if (g <= 80 || g <= maxOther) return 0;
+  const dominance = (g - maxOther) / 255;
+  const brightness = g / 255;
+  return Math.min(1, dominance * 1.8) * Math.min(1, brightness * 1.4);
+}
+
+/** Solve an n×n linear system Ax = b using Gaussian elimination with partial pivoting. */
+function gaussianElimination(A: number[][], b: number[]): Float64Array | null {
+  const n = A.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let maxRow = col;
+    for (let row = col + 1; row < n; row++) {
+      if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row;
+    }
+    [M[col], M[maxRow]] = [M[maxRow], M[col]];
+    if (Math.abs(M[col][col]) < 1e-10) return null; // singular
+    for (let row = 0; row < n; row++) {
+      if (row === col) continue;
+      const f = M[row][col] / M[col][col];
+      for (let c = col; c <= n; c++) M[row][c] -= f * M[col][c];
+    }
+  }
+  const x = new Float64Array(n);
+  for (let i = 0; i < n; i++) x[i] = M[i][n] / M[i][i];
+  return x;
+}
+
+/**
+ * Compute the 3×3 homography H (stored as a 9-element Float64Array, row-major)
+ * that maps frame-space points (dstPts) to artwork-space points (srcPts).
+ * For a frame pixel (px, py):
+ *   w  = H[6]*px + H[7]*py + H[8]
+ *   ax = (H[0]*px + H[1]*py + H[2]) / w
+ *   ay = (H[3]*px + H[4]*py + H[5]) / w
+ */
+function solveHomography(
+  dstPts: [number, number][],
+  srcPts: [number, number][]
+): Float64Array | null {
+  const A: number[][] = [];
+  const b: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const [px, py] = dstPts[i];
+    const [ax, ay] = srcPts[i];
+    A.push([px, py, 1, 0, 0, 0, -px * ax, -py * ax]);
+    b.push(ax);
+    A.push([0, 0, 0, px, py, 1, -px * ay, -py * ay]);
+    b.push(ay);
+  }
+  const h = gaussianElimination(A, b);
+  if (!h) return null;
+  const H = new Float64Array(9);
+  for (let i = 0; i < 8; i++) H[i] = h[i];
+  H[8] = 1;
+  return H;
+}
+
+/**
+ * Find the four extreme corners of the green quadrilateral using diagonal extrema.
+ * - TL = green pixel with minimum (x + y)  → top-left
+ * - TR = green pixel with maximum (x − y)  → top-right
+ * - BR = green pixel with maximum (x + y)  → bottom-right
+ * - BL = green pixel with minimum (x − y)  → bottom-left
+ * Returns [TL, TR, BR, BL] or null if no green pixels found.
+ */
+function findGreenQuadCorners(
+  imageData: ImageData,
+  bounds: { minX: number; minY: number; maxX: number; maxY: number }
+): [[number, number], [number, number], [number, number], [number, number]] | null {
+  const { data, width } = imageData;
+  let tlX = 0, tlY = 0, trX = 0, trY = 0, brX = 0, brY = 0, blX = 0, blY = 0;
+  let tlScore = Infinity, trScore = -Infinity, brScore = -Infinity, blScore = Infinity;
+  let found = false;
+
+  for (let y = bounds.minY; y <= bounds.maxY; y++) {
+    for (let x = bounds.minX; x <= bounds.maxX; x++) {
+      const idx = (y * width + x) * 4;
+      const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+      if (g > 140 && g > r * 1.35 && g > b * 1.35) {
+        found = true;
+        if (x + y < tlScore) { tlScore = x + y; tlX = x; tlY = y; }
+        if (x - y > trScore) { trScore = x - y; trX = x; trY = y; }
+        if (x + y > brScore) { brScore = x + y; brX = x; brY = y; }
+        if (x - y < blScore) { blScore = x - y; blX = x; blY = y; }
+      }
+    }
+  }
+  if (!found) return null;
+  return [[tlX, tlY], [trX, trY], [brX, brY], [blX, blY]];
+}
+
+/**
+ * Composite artwork into the frame using perspective-correct homography mapping.
+ *
+ * Steps:
+ *  1. Detect the 4 corners of the green quad and solve the homography H that maps
+ *     each frame pixel back to its correct position in the pre-scaled artwork canvas.
+ *  2. For every pixel in the bounding box, compute its greenness score.
+ *     — Score = 0  → untouched (frame content preserved perfectly).
+ *     — Score > 0  → artwork alpha-blended in proportion to greenness, sampled via H.
+ *  3. Green spill suppression: reduce excess green channel on frame pixels
+ *     immediately adjacent to the composite boundary.
+ */
 function compositeImages(
   frameImageData: ImageData,
   artworkCanvas: HTMLCanvasElement,
@@ -182,63 +287,78 @@ function compositeImages(
   const { data, width, height } = frameImageData;
   const artCtx = artworkCanvas.getContext('2d')!;
   const artData = artCtx.getImageData(0, 0, artworkCanvas.width, artworkCanvas.height);
-  const bw = bounds.maxX - bounds.minX + 1;
-  const bh = bounds.maxY - bounds.minY + 1;
+  const bw = artworkCanvas.width;
+  const bh = artworkCanvas.height;
 
-  const EXTRA_PIXELS = 4;
-  const mask = new Uint8Array(width * height);
-  
-  // 1. Identify all roughly green pixels (relaxed threshold for the fringe)
-  for (let y = Math.max(0, bounds.minY - EXTRA_PIXELS * 2); y <= Math.min(height - 1, bounds.maxY + EXTRA_PIXELS * 2); y++) {
-    for (let x = Math.max(0, bounds.minX - EXTRA_PIXELS * 2); x <= Math.min(width - 1, bounds.maxX + EXTRA_PIXELS * 2); x++) {
+  // ── 1. Build perspective homography ────────────────────────────────────────
+  let H: Float64Array | null = null;
+  const corners = findGreenQuadCorners(frameImageData, bounds);
+  if (corners) {
+    const [TL, TR, BR, BL] = corners;
+    // Map each frame corner → corresponding artwork corner
+    H = solveHomography(
+      [TL,       TR,       BR,       BL      ],   // frame (destination)
+      [[0, 0], [bw, 0], [bw, bh], [0, bh]]         // artwork (source)
+    );
+  }
+
+  // ── 2. Per-pixel chroma-key + perspective-correct sampling ─────────────────
+  for (let y = bounds.minY; y <= bounds.maxY; y++) {
+    for (let x = bounds.minX; x <= bounds.maxX; x++) {
       const idx = (y * width + x) * 4;
       const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-      // Relaxed green threshold for mask to catch edge cases
-      if (g > 100 && g > r * 1.15 && g > b * 1.15) {
-        mask[y * width + x] = 1;
+
+      const gScore = greenness(r, g, b);
+      if (gScore <= 0) continue; // frame pixel — leave untouched
+
+      // Project frame pixel → artwork pixel
+      let ax: number, ay: number;
+      if (H) {
+        const w3 = H[6] * x + H[7] * y + H[8];
+        ax = (H[0] * x + H[1] * y + H[2]) / w3;
+        ay = (H[3] * x + H[4] * y + H[5]) / w3;
+      } else {
+        // Fallback: linear mapping within bounding box
+        ax = ((x - bounds.minX) / (bounds.maxX - bounds.minX + 1)) * bw;
+        ay = ((y - bounds.minY) / (bounds.maxY - bounds.minY + 1)) * bh;
+      }
+      ax = Math.max(0, Math.min(bw - 1, Math.floor(ax)));
+      ay = Math.max(0, Math.min(bh - 1, Math.floor(ay)));
+      const aIdx = (ay * bw + ax) * 4;
+
+      // Alpha-blend based on greenness (fringe → partial, core → full)
+      const alpha = Math.min(1, gScore / 0.35);
+      data[idx]     = Math.round(r                * (1 - alpha) + artData.data[aIdx]     * alpha);
+      data[idx + 1] = Math.round(g                * (1 - alpha) + artData.data[aIdx + 1] * alpha);
+      data[idx + 2] = Math.round(b                * (1 - alpha) + artData.data[aIdx + 2] * alpha);
+      data[idx + 3] = 255;
+    }
+  }
+
+  // ── 3. Green spill suppression on adjacent frame pixels ───────────────────
+  // Any frame pixel neighbouring the green region that picked up a green cast
+  // gets its green channel reduced back toward the neutral average of R and B.
+  const SPILL_MARGIN = 4;
+  for (let y = Math.max(0, bounds.minY - SPILL_MARGIN); y <= Math.min(height - 1, bounds.maxY + SPILL_MARGIN); y++) {
+    for (let x = Math.max(0, bounds.minX - SPILL_MARGIN); x <= Math.min(width - 1, bounds.maxX + SPILL_MARGIN); x++) {
+      const idx = (y * width + x) * 4;
+      const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+      // Skip pixels that are already composited artwork or genuinely green
+      if (greenness(r, g, b) > 0.05) continue;
+      // Measure spill: how much more green is there vs. the neutral average of R and B
+      const neutral = (r + b) / 2;
+      const spill = g - neutral;
+      if (spill > 12) {
+        // Suppress ~65% of the spill, leaving a natural look
+        data[idx + 1] = Math.round(g - spill * 0.65);
       }
     }
   }
 
-  // 2. Dilate the mask by EXTRA_PIXELS to cover fringe completely
-  const dilatedMask = new Uint8Array(width * height);
-  for (let y = Math.max(0, bounds.minY - EXTRA_PIXELS * 2); y <= Math.min(height - 1, bounds.maxY + EXTRA_PIXELS * 2); y++) {
-    for (let x = Math.max(0, bounds.minX - EXTRA_PIXELS * 2); x <= Math.min(width - 1, bounds.maxX + EXTRA_PIXELS * 2); x++) {
-      let isNearGreen = false;
-      for (let dy = -EXTRA_PIXELS; dy <= EXTRA_PIXELS; dy++) {
-        for (let dx = -EXTRA_PIXELS; dx <= EXTRA_PIXELS; dx++) {
-          const ny = y + dy;
-          const nx = x + dx;
-          if (ny >= 0 && ny < height && nx >= 0 && nx < width && mask[ny * width + nx]) {
-            isNearGreen = true;
-            break;
-          }
-        }
-        if (isNearGreen) break;
-      }
-      if (isNearGreen) {
-        dilatedMask[y * width + x] = 1;
-      }
-    }
-  }
-
-  // 3. Composite using dilated mask
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (dilatedMask[y * width + x]) {
-        const idx = (y * width + x) * 4;
-        const ax = Math.max(0, Math.min(artworkCanvas.width - 1, Math.floor(((x - bounds.minX) / bw) * artworkCanvas.width)));
-        const ay = Math.max(0, Math.min(artworkCanvas.height - 1, Math.floor(((y - bounds.minY) / bh) * artworkCanvas.height)));
-        const aIdx = (ay * artworkCanvas.width + ax) * 4;
-        data[idx]     = artData.data[aIdx];
-        data[idx + 1] = artData.data[aIdx + 1];
-        data[idx + 2] = artData.data[aIdx + 2];
-        data[idx + 3] = artData.data[aIdx + 3];
-      }
-    }
-  }
   return frameImageData;
 }
+
+
 
 /** Format a date string */
 function formatDate(str: string) {
