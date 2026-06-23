@@ -63,11 +63,15 @@ export default async function Home() {
       {/* ── Section 1: Hero ── */}
       <section className={styles.hero}>
         <div className={styles.heroImageContainer}>
-          <img
-            src="/images/cover.png"
-            alt="Close-up of mixed media artwork with gold leaf and ink"
-            className={styles.heroImage}
-          />
+          <picture>
+            <source media="(max-width: 767px)" srcSet="/images/hero-phone.png" />
+            <img
+              src="/images/cover.png"
+              alt="Close-up of mixed media artwork with gold leaf and ink"
+              className={styles.heroImage}
+            />
+          </picture>
+          <div className={styles.heroOverlay} />
         </div>
         <div className={styles.heroContent}>
           <h1 className={styles.heroTitle}>

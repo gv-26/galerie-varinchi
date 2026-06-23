@@ -23,7 +23,7 @@
 .heroOverlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, var(--color-bg) 0%, rgba(250, 249, 247, 0.2) 60%, transparent 100%);
+  background: none;
 }
 
 .heroContent {
@@ -218,4 +218,18 @@
 .journalCard:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 767px) {
+  .heroOverlay {
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.3) 50%, transparent 100%);
+  }
+  .heroTitle {
+    color: #ffffff;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+  .heroText {
+    color: #ffffff;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  }
 }

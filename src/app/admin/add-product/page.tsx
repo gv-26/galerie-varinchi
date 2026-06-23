@@ -52,7 +52,7 @@ function calculateSpecPrice(
   heightCm: number,
   sizeLabel: string,
   printMaterial: 'Canvas' | 'Paper',
-  frameMaterial: 'Teakwood' | 'Ashwood',
+  frameMaterial: 'Teakwood' | 'Ashwood Light' | 'Ashwood Black',
   multiplier: number = 3
 ): PriceBreakdown {
   // Printing
@@ -191,7 +191,8 @@ function AddProductContent() {
   const [useCanvas, setUseCanvas] = useState(true);
   const [usePaper, setUsePaper] = useState(false);
   const [useTeakwood, setUseTeakwood] = useState(true);
-  const [useAshwood, setUseAshwood] = useState(false);
+  const [useAshwoodLight, setUseAshwoodLight] = useState(false);
+  const [useAshwoodBlack, setUseAshwoodBlack] = useState(false);
   const [multiplier, setMultiplier] = useState('3');
 
   // Expanded row tracking for breakdown
@@ -411,9 +412,10 @@ function AddProductContent() {
     const prints: Array<'Canvas' | 'Paper'> = [];
     if (useCanvas) prints.push('Canvas');
     if (usePaper) prints.push('Paper');
-    const frames: Array<'Teakwood' | 'Ashwood'> = [];
+    const frames: Array<'Teakwood' | 'Ashwood Light' | 'Ashwood Black'> = [];
     if (useTeakwood) frames.push('Teakwood');
-    if (useAshwood) frames.push('Ashwood');
+    if (useAshwoodLight) frames.push('Ashwood Light');
+    if (useAshwoodBlack) frames.push('Ashwood Black');
 
     if (prints.length === 0 || frames.length === 0) return [];
 
@@ -430,7 +432,7 @@ function AddProductContent() {
       }
     }
     return results;
-  }, [sizes, useCanvas, usePaper, useTeakwood, useAshwood, multiplier]);
+  }, [sizes, useCanvas, usePaper, useTeakwood, useAshwoodLight, useAshwoodBlack, multiplier]);
 
   // Valid sizes = sizes where both w and h are filled
   const validSizes = sizes.filter(s => parseFloat(s.widthCm) > 0 && parseFloat(s.heightCm) > 0);
@@ -467,7 +469,8 @@ function AddProductContent() {
       if (usePaper) printOpts.push('Paper');
       const frameOpts: string[] = [];
       if (useTeakwood) frameOpts.push('Teakwood');
-      if (useAshwood) frameOpts.push('Ashwood');
+      if (useAshwoodLight) frameOpts.push('Ashwood Light');
+      if (useAshwoodBlack) frameOpts.push('Ashwood Black');
       const sizeOpts = validSizes.map(s => s.label.trim() || autoLabel(s.widthCm, s.heightCm));
 
       finalSpecs = [
@@ -1052,8 +1055,11 @@ function AddProductContent() {
                       <button type="button" style={toggleBtn(useTeakwood)} onClick={() => setUseTeakwood(v => !v)}>
                         <span>{useTeakwood ? '☑' : '☐'}</span> Teakwood <span style={{ fontSize: '11px', opacity: 0.7 }}>₹5000/cu.ft</span>
                       </button>
-                      <button type="button" style={toggleBtn(useAshwood)} onClick={() => setUseAshwood(v => !v)}>
-                        <span>{useAshwood ? '☑' : '☐'}</span> Ashwood <span style={{ fontSize: '11px', opacity: 0.7 }}>₹3500/cu.ft</span>
+                      <button type="button" style={toggleBtn(useAshwoodLight)} onClick={() => setUseAshwoodLight(v => !v)}>
+                        <span>{useAshwoodLight ? '☑' : '☐'}</span> Ashwood Light <span style={{ fontSize: '11px', opacity: 0.7 }}>₹3500/cu.ft</span>
+                      </button>
+                      <button type="button" style={toggleBtn(useAshwoodBlack)} onClick={() => setUseAshwoodBlack(v => !v)}>
+                        <span>{useAshwoodBlack ? '☑' : '☐'}</span> Ashwood Black <span style={{ fontSize: '11px', opacity: 0.7 }}>₹3500/cu.ft</span>
                       </button>
                     </div>
                   </div>
