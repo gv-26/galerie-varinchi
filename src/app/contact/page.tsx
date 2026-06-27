@@ -85,21 +85,15 @@ export default function ContactPage() {
 
           <div>
             <div className="profile-card">
-              <h3>Visit Us</h3>
-              <p className="text-sm text-secondary" style={{ lineHeight: 1.8 }}>
-                Galerie Varinchi<br />
-                123 Art District, Gallery Lane<br />
-                Mumbai, Maharashtra 400001<br />
-                India
-              </p>
-            </div>
-            <div className="profile-card">
               <h3>Contact Info</h3>
               <p className="text-sm">
                 <a href="tel:+917259644702" style={{ color: 'var(--color-accent)' }}>+91 72596 44702</a>
               </p>
               <p className="text-sm">
                 <a href="mailto:galerievarinchi@gmail.com" style={{ color: 'var(--color-accent)' }}>galerievarinchi@gmail.com</a>
+              </p>
+              <p className="text-sm text-secondary" style={{ marginTop: 'var(--space-xs)' }}>
+                Kochi, Kerala
               </p>
             </div>
             <div className="profile-card">
