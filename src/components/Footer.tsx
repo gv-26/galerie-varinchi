@@ -27,6 +27,7 @@ export default function Footer() {
           <div>
             <h4>Information</h4>
             <div className="footer-links">
+              <Link href="/about">About Us</Link>
               <Link href="/privacy">Privacy Policy</Link>
               <Link href="/terms">Terms of Service</Link>
               <Link href="/return-policy">Return Policy</Link>
@@ -42,6 +43,7 @@ export default function Footer() {
               <Link href="/contact">Contact Us</Link>
               <a href="tel:+917259644702">+91 72596 44702</a>
               <a href="mailto:galerievarinchi@gmail.com">galerievarinchi@gmail.com</a>
+              <span style={{ display: 'block', padding: 'var(--space-xs) 0', fontSize: '13px', color: 'rgba(255, 255, 255, 0.5)' }}>Kochi, Kerala</span>
             </div>
           </div>
 
